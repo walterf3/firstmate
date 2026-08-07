@@ -169,6 +169,7 @@ oracle_query() {
   ensure_oracle_script
   local err; err=$(mktemp "$FM_HOME/state/.oracle-q-XXXXXX") || return 1
   local rc=0
+  # shellcheck disable=SC2097,SC2098 # CROF_PATH is re-exported for the child; both expansions read the shell's value.
   (cd "$CROF_PATH" && HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
     CROF_PATH="$CROF_PATH" PYTHONNOUSERSITE=1 PYTHONPATH="$CROF_PATH" \
     /usr/bin/arch -arm64 "$CROF_VENV" "$ORACLE_SCRIPT" "$REGISTRY" "$query" "$max") 2>"$err" || rc=$?
