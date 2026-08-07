@@ -352,6 +352,17 @@ print_file_or_absent "$DATA/captain.md" "data/captain.md"
 print_file_or_absent "$DATA/captain-shared.md" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)"
 print_file_or_absent "$DATA/learnings.md" "data/learnings.md"
 
+subsection "Multi-brain oracle context"
+ORACLE_SCRIPT="$SCRIPT_DIR/fm-oracle.sh"
+if [ -f "$DATA/brains/brain_registry.json" ] && [ -f "$ORACLE_SCRIPT" ]; then
+  echo '(querying registered brains: firstmate_ops, um5_ops, crof_ops)'
+  oracle_context=$("$ORACLE_SCRIPT" query "fleet state, captain preferences, key decisions" 2 2>&1) || oracle_context='(oracle query failed)'
+  echo "$oracle_context" | head -120
+  echo '(brain context is additive — corroborate live facts with git/tasks-axi/quota-axi)'
+else
+  echo '(oracle unavailable — missing registry or script)'
+fi
+
 # --- 5. fleet-state digest ---------------------------------------------
 section "FLEET STATE"
 print_backlog_compact "$DATA/backlog.md" "data/backlog.md"
