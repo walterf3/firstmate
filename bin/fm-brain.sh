@@ -84,7 +84,8 @@ cmd_add() {
     PYTHONNOUSERSITE=1 PYTHONPATH="$CROF_PATH" \
     /usr/bin/arch -arm64 "$CROF_VENV" \
     "$DATA/brains/ingest_finding.py" \
-    --kind "$kind" --summary "$summary" --ref "$ref") 2>"$err" || rc=$?
+    --kind "$kind" --summary "$summary" --ref "$ref" \
+    --claim-ref "$task") 2>"$err" || rc=$?
   if [ "$rc" -ne 0 ]; then
     cat "$err" >&2
     rm -f "$err"

@@ -31,15 +31,20 @@ ensure_oracle_script() {
 #!/usr/bin/env python3
 """Oracle multi-brain query — called by fm-oracle.sh.
 
-Reads brain_registry.json and queries each registered brain via read_only_brain_query.
-Merges results with per-brain attribution.
+Reads brain_registry.json and queries each registered brain, merges results.
+Each brain is queried in its own subprocess to avoid cbgt namespace conflicts.
 """
 from __future__ import annotations
-import json, os, sys, traceback
+import json, os, subprocess, sys, traceback
 from pathlib import Path
 
+CROF_VENV = "/Users/walter/Dev/crof/.venv/bin/python"
+CROF_PATH = "/Users/walter/Dev/firstmate/projects/crof"
+QUERY_HELPER = f"{CROF_PATH}/examples/read_only_brain_query.py"
+# note: read_only_brain_query.py takes <brain_path> <query> [max_results]
+
 def main() -> int:
-    registry_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/Users/walter/Dev/firstmate/data/brains/brain_registry.json")
+    registry_path = Path(sys.argv[1])
     query = sys.argv[2] if len(sys.argv) > 2 else ""
     max_results = int(sys.argv[3]) if len(sys.argv) > 3 else 3
     if not query:
@@ -48,10 +53,6 @@ def main() -> int:
     if not registry_path.is_file():
         print(json.dumps({"error": f"registry not found: {registry_path}"}))
         return 1
-
-    # Need to add CROF to path for the query helper
-    crof_path = os.environ.get("CROF_PATH", str(Path(registry_path).parents[2] / "projects" / "crof"))
-    sys.path.insert(0, crof_path)
 
     registry = json.loads(registry_path.read_text())
     answers = []
@@ -63,36 +64,45 @@ def main() -> int:
             errors.append({"brain": name, "status": "ABSENT", "path": str(brain_path)})
             continue
         try:
-            # Import within loop to avoid import-order issues
-            from examples.read_only_brain_query import query_existing_brain
-            # Need to reopen for each query
-            import importlib
-            importlib.reload(__import__("examples.read_only_brain_query"))
-            from examples.read_only_brain_query import query_existing_brain
-
-            out = query_existing_brain(brain_path, query, max_results=max_results)
+            result = subprocess.run(
+                [CROF_VENV, QUERY_HELPER, str(brain_path), query, "--max-results", str(max_results)],
+                capture_output=True, text=True, timeout=45,
+                env={
+                    **os.environ,
+                    "HF_HUB_OFFLINE": "1",
+                    "TRANSFORMERS_OFFLINE": "1",
+                    "PYTHONNOUSERSITE": "1",
+                    "PYTHONPATH": CROF_PATH,
+                },
+                cwd=CROF_PATH,
+            )
+            if result.returncode != 0:
+                errors.append({"brain": name, "status": "FAIL",
+                               "stderr": result.stderr[:200]})
+                continue
+            out = json.loads(result.stdout)
             hybrid = out.get("hybrid", {})
             brain_results = hybrid.get("results", [])
             vec_status = hybrid.get("vector_status", {})
-
             entry = {
                 "brain": name,
                 "path": str(brain_path),
                 "vector_coverage": vec_status.get("coverage_pct", 0),
                 "results_count": len(brain_results),
                 "results": [{
-                    "source_key": br.get("source_key", ""),
-                    "summary": br.get("summary", ""),
-                    "heading_path": br.get("heading_path", ""),
-                    "status": br.get("status", ""),
-                    "combined_score": br.get("combined_score", 0),
-                    "chunk_text": (br.get("chunk_text") or "")[:300],
-                } for br in brain_results[:max_results]],
+                    "source_key": r.get("source_key", ""),
+                    "summary": r.get("summary", ""),
+                    "heading_path": r.get("heading_path", ""),
+                    "status": r.get("status", ""),
+                    "combined_score": r.get("combined_score", 0),
+                    "chunk_text": (r.get("chunk_text") or "")[:300],
+                } for r in brain_results[:max_results]],
             }
             answers.append(entry)
         except Exception as e:
-            errors.append({"brain": name, "status": "ERROR", "error": str(e)[:200],
-                           "trace": traceback.format_exc()[:300]})
+            errors.append({"brain": name, "status": "ERROR",
+                           "error": str(e)[:200],
+                           "trace": traceback.format_exc()[:200]})
 
     output = {
         "query": query,
@@ -130,6 +140,7 @@ health_check() {
   local rc=0
   python3 -c "
 import json, sqlite3
+from pathlib import Path
 r=json.load(open('$REGISTRY'))
 results={}
 for name, cfg in r['brains'].items():
@@ -138,7 +149,7 @@ for name, cfg in r['brains'].items():
         results[name]={'status':'ABSENT'}
         continue
     try:
-        con=sqlite3.connect(f'{p}?mode=ro', uri=True)
+        con=sqlite3.connect(Path(p).resolve().as_uri() + '?mode=ro', uri=True)
         con.execute('PRAGMA query_only=ON')
         check=con.execute('PRAGMA integrity_check').fetchone()[0]
         con.close()
