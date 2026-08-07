@@ -77,7 +77,8 @@ cmd_add() {
     *) echo "error: --kind must be scout or decision" >&2; return 2 ;;
   esac
   check_brain || return 1
-  local err rc
+  local err rc suffix
+  suffix=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8) || return 1
   err=$(mktemp "$FM_HOME/state/.brain-a-XXXXXX") || return 1
   rc=0
   (cd "$CROF_PATH" && HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -85,7 +86,7 @@ cmd_add() {
     /usr/bin/arch -arm64 "$CROF_VENV" \
     "$DATA/brains/ingest_finding.py" \
     --kind "$kind" --summary "$summary" --ref "$ref" \
-    --claim-ref "$task") 2>"$err" || rc=$?
+    --claim-ref "closeout:$kind:$task:$suffix") 2>"$err" || rc=$?
   if [ "$rc" -ne 0 ]; then
     cat "$err" >&2
     rm -f "$err"
