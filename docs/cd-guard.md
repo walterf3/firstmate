@@ -99,7 +99,7 @@ Identical in shape to `docs/arm-pretool-check.md`:
 - `--claude` suppresses stdout completely because Claude ignores a PreToolUse deny when stdout is nonempty.
 - Codex blocks on exit 2 and displays stderr.
 - OpenCode throws only when the checker exits 2.
-- Pi and pi-signed return `{block: true}` only when the checker exits 2.
+- Pi, pi-signed, and OMP return `{block: true}` only when the checker exits 2.
 
 ## Shared classifier ownership
 
