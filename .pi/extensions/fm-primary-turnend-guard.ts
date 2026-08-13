@@ -21,7 +21,7 @@ const extensionVersion = `sha256:${createHash("sha256").update(readFileSync(exte
 // Its dedicated profile marker is optional, so the launcher identity is the
 // stronger runtime distinction when available; test and SDK callers may use
 // OMP_PROFILE to select the same event boundary without a launcher argv.
-const ompRuntime = process.env.OMP_PROFILE !== undefined || process.argv.slice(0, 2).some((argument) => /(?:^|\/)omp(?:$|[[:space:]])/.test(argument));
+const ompRuntime = process.env.OMP_PROFILE !== undefined || process.argv.slice(0, 2).some((argument) => /(?:^|\/)omp(?:$|\s)/.test(argument));
 const logicalRunBoundary = ompRuntime ? ("agent_end" as any) : "agent_settled";
 
 function parentPid(pid: string): string {
