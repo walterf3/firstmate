@@ -65,7 +65,14 @@ fm_harness_process_matches() {  # <comm> <args>
   # Bare interpreter (e.g. node or bun): match the harness name in its script path.
   case "$comm" in
     *node*|*python*|*bun*)
-      if fm_harness_path_name "$args" >/dev/null || printf '%s' "$args" | grep -qE '(^|[[:space:]])[^[:space:]]*/omp([[:space:]]|$)'; then
+      # OMP's Bun client is the primary session process on the verified launch
+      # path. Match its exact executable argv boundary before the generic
+      # harness-path fallback so an embedded Pi marker cannot move the lock to
+      # an unrelated interpreter or helper.
+      if printf '%s' "$args" | grep -qE '(^|[[:space:]])[^[:space:]]*/omp([[:space:]]|$)'; then
+        return 0
+      fi
+      if fm_harness_path_name "$args" >/dev/null; then
         return 0
       fi
       if printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"; then

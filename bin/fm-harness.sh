@@ -18,7 +18,8 @@
 # harness only, no model/effort. Only the first non-empty, non-comment line is parsed.
 # Model/effort come ONLY from this file - config/crew-harness stays a bare adapter
 # name and is never parsed for a model.
-# Detection layers: verified environment markers first, then process ancestry.
+# Detection layers: the exact OMP launcher boundary first because OMP shares
+# Pi's marker, then verified environment markers, then process ancestry.
 # Record each newly verified env marker here.
 set -u
 
@@ -27,14 +28,37 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
+omp_ancestry_detected() {
+  local pid=$$ comm args
+  for _ in 1 2 3 4 5 6 7 8; do
+    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || break
+    case "$(basename -- "$comm")" in
+      omp) return 0 ;;
+      bun*)
+        args=$(ps -o args= -p "$pid" 2>/dev/null)
+        if printf '%s' "$args" | grep -qE '(^|[[:space:]])[^[:space:]]*/omp([[:space:]]|$)'; then
+          return 0
+        fi
+        ;;
+    esac
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -n "$pid" ] && [ "$pid" -gt 1 ] || break
+  done
+  return 1
+}
+
 detect_own() {
+  # OMP embeds Pi and deliberately inherits PI_CODING_AGENT=true. Its exact
+  # launcher boundary must therefore win over Pi's shared marker; otherwise an
+  # OMP primary is silently rendered as a bare Pi primary.
+  if omp_ancestry_detected; then
+    echo omp
+    return
+  fi
   # Layer 1: environment markers for verified harnesses.
-  # Keep marker detection before ancestry detection as an explicit precedence rule.
-  # Only claude, pi, and grok set verified markers of their own; codex, opencode,
-  # omp, and kimi are markerless, so a foreign marker retained in a terminal
-  # multiplexer's stored environment can silently misidentify one of them before
-  # ancestry is consulted. This is a precedence hazard, not evidence that
-  # CLAUDECODE inheritance into a kimi child was observed; it was not observed.
+  # Keep marker detection before ordinary ancestry detection as an explicit
+  # precedence rule. OMP is the one exception because its launcher shares Pi's
+  # marker and has a stronger exact process-boundary signal.
   [ "${CLAUDECODE:-}" = "1" ] && { echo claude; return; }
   if [ "${PI_CODING_AGENT:-}" = "true" ]; then
     if [ "${FM_PI_HARNESS:-}" = pi-signed ]; then echo pi-signed; else echo pi; fi

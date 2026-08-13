@@ -1294,7 +1294,7 @@ EOF
   block_count=$(printf '%s\n' "$out" | grep -c '^SUPERVISION OPERATING INSTRUCTIONS - primary harness:')
   [ "$block_count" -eq 1 ] || fail "expected exactly one supervision block, got $block_count"
   assert_contains "$out" "SUPERVISION OPERATING INSTRUCTIONS - primary harness: pi" "pi supervision block missing"
-  assert_contains "$out" "Mode: Pi extension background wake." "pi snippet missing from session start"
+  assert_contains "$out" "Mode: Pi-family extension background wake." "pi snippet missing from session start"
   assert_contains "$out" "PI_WATCH_EXTENSION: not loaded" "pi extension load diagnostic missing"
   assert_contains "$out" "restart plain pi so $root/.pi/extensions/fm-primary-turnend-guard.ts and $root/.pi/extensions/fm-primary-pi-watch.ts auto-load" "pi extension load diagnostic omits the turn-end guard extension"
 
@@ -1305,6 +1305,31 @@ EOF
   [ "$sup_line" -lt "$context_line" ] || fail "supervision block did not precede context"
 
   pass "session start emits exactly one detected harness block and reports Pi extension load state"
+}
+
+test_omp_primary_uses_pi_extension_supervision_without_identity_normalization() {
+  local rec root home fakebin out
+  rec=$(new_world omp-supervision-block)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" omp
+
+  out=$(FM_FAKE_HARNESS=omp run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  assert_contains "$out" "SUPERVISION OPERATING INSTRUCTIONS - primary harness: omp" \
+    "OMP primary was not detected as its own harness"
+  assert_contains "$out" "Mode: Pi-family extension background wake." \
+    "OMP primary did not reuse the Pi-family supervision protocol"
+  assert_contains "$out" "fm_watch_arm_pi" \
+    "OMP supervision guidance did not name the embedded Pi tool"
+  assert_contains "$out" "PI_WATCH_EXTENSION: not loaded" \
+    "OMP primary skipped Pi extension validation"
+  assert_contains "$out" "restart omp so $root/.pi/extensions/fm-primary-turnend-guard.ts and $root/.pi/extensions/fm-primary-pi-watch.ts auto-load" \
+    "OMP extension diagnostic did not preserve the executable identity"
+
+  pass "session start preserves OMP primary identity while applying Pi extension guarantees"
 }
 
 test_pi_signed_primary_uses_pi_extensions_without_identity_normalization() {
@@ -1320,7 +1345,7 @@ EOF
 
   assert_contains "$out" "SUPERVISION OPERATING INSTRUCTIONS - primary harness: pi-signed" \
     "session start normalized a pi-signed primary to pi"
-  assert_contains "$out" "Mode: Pi extension background wake." \
+  assert_contains "$out" "Mode: Pi-family extension background wake." \
     "pi-signed primary did not reuse Pi's supervision protocol"
   assert_contains "$out" "PI_WATCH_EXTENSION: not loaded" \
     "pi-signed primary skipped Pi extension validation"
@@ -1441,6 +1466,7 @@ test_trace_context_effective_state_is_frozen_after_lock
 test_session_lock_concurrent_single_winner
 test_output_ordering_diagnostics_lead
 test_herdr_backend_diagnostics_follow_real_session_start
+test_omp_primary_uses_pi_extension_supervision_without_identity_normalization
 test_session_start_relaunches_missing_pi_secondmate
 test_session_start_preserves_ambiguous_pi_process
 test_session_start_preserves_transiently_unreadable_tmux

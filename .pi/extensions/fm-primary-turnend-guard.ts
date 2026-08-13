@@ -17,6 +17,12 @@ const fmHome = process.env.FM_HOME || process.env.FM_ROOT_OVERRIDE || root;
 const state = process.env.FM_STATE_OVERRIDE || `${fmHome}/state`;
 const marker = `${state}/.pi-turnend-extension-loaded`;
 const extensionVersion = `sha256:${createHash("sha256").update(readFileSync(extensionFile)).digest("hex")}`;
+// OMP embeds the Pi application but sets PI_CODING_AGENT=true for its process.
+// Its dedicated profile marker is optional, so the launcher identity is the
+// stronger runtime distinction when available; test and SDK callers may use
+// OMP_PROFILE to select the same event boundary without a launcher argv.
+const ompRuntime = process.env.OMP_PROFILE !== undefined || process.argv.slice(0, 2).some((argument) => /(?:^|\/)omp(?:$|[[:space:]])/.test(argument));
+const logicalRunBoundary = ompRuntime ? ("agent_end" as any) : "agent_settled";
 
 function parentPid(pid: string): string {
   const result = spawnSync("ps", ["-o", "ppid=", "-p", pid], { encoding: "utf8" });
@@ -135,7 +141,7 @@ export default function (pi: ExtensionAPI) {
     return { block: true, reason: result.stderr.trim() || "denied by the watcher-arm PreToolUse seatbelt" };
   });
 
-  pi.on("agent_settled", async () => {
+  pi.on(logicalRunBoundary, async () => {
     if (guardFollowupActive) {
       guardFollowupActive = false;
       return;
