@@ -56,7 +56,7 @@ set -u
 # ambient CLAUDECODE=1, the pi-signed ancestry case resolves "claude". Drop the
 # ambient markers so what this suite asserts does not depend on which harness it
 # was launched from; every case states the marker it means to test.
-unset CLAUDECODE PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT
+unset CLAUDECODE PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT OMP_PROFILE
 
 BASE_PATH=${FM_TEST_BASE_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}
 fm_git_identity fmtest fmtest@example.com
@@ -303,6 +303,9 @@ SH
   got=$(env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT \
     PATH="$fakebin:$BASE_PATH" "$ROOT/bin/fm-harness.sh")
   [ "$got" = omp ] || fail "Bun OMP ancestry resolved '$got', expected omp"
+  got=$(env -u CLAUDECODE -u GROK_AGENT PATH="$fakebin:$BASE_PATH" \
+    PI_CODING_AGENT=true FM_PI_HARNESS=pi-signed "$ROOT/bin/fm-harness.sh")
+  [ "$got" = omp ] || fail "OMP ancestry lost to the shared Pi marker, resolved '$got'"
   got=$(PATH="$fakebin:$BASE_PATH" bash -c \
     '. "$0/bin/fm-session-lock-lib.sh"; fm_harness_ancestry_pid' "$ROOT")
   [ "$got" = 900 ] || fail "OMP session-lock ancestry selected '$got', expected pid 900"
@@ -905,7 +908,7 @@ test_spawned_secondmate_uses_its_harness_supervision_model() {
     fakebin="$w/tmux-sm/fakebin"
     cat > "$fakebin/$harness" <<SH
 #!/usr/bin/env bash
-"$ROOT/bin/fm-guard.sh"
+FM_ROOT_OVERRIDE="$sm" FM_HOME="$sm" "$ROOT/bin/fm-guard.sh"
 SH
     chmod +x "$fakebin/$harness"
     launch=$(cat "$launchlog")

@@ -15,7 +15,7 @@ test_selected_harness_block_only() {
   assert_contains "$out" "Mode: Codex foreground checkpoint." "codex snippet missing"
   assert_contains "$out" "bin/fm-watch-checkpoint.sh" "codex checkpoint helper missing"
   assert_not_contains "$out" "Mode: Claude Stop-hook-owned supervision." "renderer printed the claude snippet too"
-  assert_not_contains "$out" "Mode: Pi extension background wake." "renderer printed the pi snippet too"
+  assert_not_contains "$out" "Mode: Pi-family extension background wake." "renderer printed the pi snippet too"
   pass "renderer prints exactly the selected harness block"
 }
 
@@ -125,7 +125,7 @@ test_pi_signed_preserves_identity_with_pi_supervision_protocol() {
   out=$("$RENDER" --harness pi-signed)
   assert_contains "$out" "primary harness: pi-signed" \
     "pi-signed supervision normalized the visible runtime identity to pi"
-  assert_contains "$out" "Mode: Pi extension background wake." \
+  assert_contains "$out" "Mode: Pi-family extension background wake." \
     "pi-signed did not reuse Pi's authoritative supervision protocol"
   ordinary=$(printf '%s\n' "$out" | grep -F -- '- Ordinary wake:')
   assert_contains "$ordinary" "Pi extension already owns watcher continuity" \
@@ -134,6 +134,21 @@ test_pi_signed_preserves_identity_with_pi_supervision_protocol() {
   assert_contains "$out" "Pi tool fm_watch_arm_pi" \
     "pi-signed repair semantics diverged from Pi"
   pass "pi-signed keeps its identity while sharing Pi's supervision protocol"
+}
+
+test_omp_shares_pi_watcher_protocol_with_distinct_repair_command() {
+  local out ordinary
+  out=$("$RENDER" --harness omp)
+  assert_contains "$out" "primary harness: omp" "OMP supervision normalized its visible runtime identity"
+  assert_contains "$out" "Mode: Pi-family extension background wake." "OMP did not reuse the Pi-family watcher protocol"
+  ordinary=$(printf '%s\n' "$out" | grep -F -- '- Ordinary wake:')
+  assert_contains "$ordinary" "OMP-embedded Pi extension already owns watcher continuity" \
+    "OMP ordinary-wake semantics did not preserve extension ownership"
+  out=$("$RENDER" --harness omp --repair-line)
+  assert_contains "$out" "OMP-embedded Pi tool fm_watch_arm_pi" \
+    "OMP repair semantics did not name the embedded Pi tool"
+  assert_contains "$out" "restart omp with -e" "OMP repair semantics did not preserve the OMP restart command"
+  pass "OMP keeps a distinct identity while sharing Pi's watcher protocol"
 }
 
 test_grok_is_background_notify() {
@@ -182,6 +197,7 @@ test_conditional_stanzas
 test_repair_lines
 test_cross_harness_ordinary_continuation_and_repair_matrix
 test_pi_signed_preserves_identity_with_pi_supervision_protocol
+test_omp_shares_pi_watcher_protocol_with_distinct_repair_command
 test_grok_is_background_notify
 test_grok_command_sources_effective_config
 test_pi_snippet_uses_effective_extension_path

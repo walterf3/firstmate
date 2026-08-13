@@ -1,0 +1,6 @@
+{
+  "extensions": [
+    ".pi/extensions/fm-primary-pi-watch.ts",
+    ".pi/extensions/fm-primary-turnend-guard.ts"
+  ]
+}

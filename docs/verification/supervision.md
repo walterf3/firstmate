@@ -60,6 +60,63 @@ The Ahoy first-message boundary was reverified on 2026-07-22 with Pi 0.81.1 and 
 Marked current operational input and the two exact legacy compatibility shapes selected Bearings, while genuine near-miss captain messages remained real boundaries.
 The detailed reconciliation and task chronology stay in the private audit report and PR evidence.
 
+## OMP primary runtime
+
+The OMP primary integration was verified on 2026-08-13 with Oh My Pi 17.3.0, embedded Pi 0.84.1, and the tracked primary extensions.
+
+Version commands:
+
+```sh
+omp --version
+pi --version
+```
+
+Observed output:
+
+```text
+omp/17.3.0
+0.84.1
+```
+
+The live OMP probe command was:
+
+```sh
+omp --no-session --auto-approve \
+  -e .pi/extensions/fm-primary-turnend-guard.ts \
+  -e .pi/extensions/fm-primary-pi-watch.ts \
+  -p 'Use the bash tool to run bin/fm-session-start.sh, then reply OMP_PRIMARY_DONE.'
+```
+
+The autoload probe command was:
+
+```sh
+omp --no-session --no-tools -p 'Reply exactly OMP_AUTLOAD_DONE.'
+```
+
+With the tracked project `.omp/settings.json` extension list, OMP loaded both tracked `.pi/extensions/*.ts` files without `-e` and wrote both live extension markers.
+OMP's extension process emitted `session_start`, `agent_start`, and `agent_end`, and the embedded Pi surface set `PI_CODING_AGENT=true` without a dedicated default-profile OMP marker.
+A named `--profile` additionally set `OMP_PROFILE`, but the stable identity signal was the exact `/omp` executable in the Bun argv.
+With the shared Pi marker present, `bin/fm-harness.sh` returned `omp` rather than `pi`.
+The session-start digest returned `SUPERVISION OPERATING INSTRUCTIONS - primary harness: omp` and `Mode: Pi-family extension background wake.`.
+The lock and both extension markers were written with the same live OMP session pid, and the digest did not report `PI_WATCH_EXTENSION` after the extensions loaded.
+A saved-session replay using `omp --profile <profile> --resume <session-id> -p <prompt>` repeated the same `session_start`, `agent_start`, and `agent_end` sequence and kept the same OMP process ancestry shape.
+
+The OMP primary extension boundary was validated with the existing guard extension fixture and `OMP_PROFILE=omp-test`.
+It registered `agent_end`, not `agent_settled`, and injected exactly one bounded `turn-end-guard` follow-up per logical run.
+The OMP live PreToolUse probe instructed the model to run `bin/fm-watch-arm.sh &` in a primary-shaped scratch checkout.
+The command was blocked, the sentinel arm body did not execute, and the model completed with `OMP_PRETOOL_DONE`.
+The watcher continuity fixture used the same generation-owned Pi extension and confirmed one successor cycle with no overlapping arm child across replacement session callbacks.
+
+Deterministic entry points:
+
+```sh
+tests/fm-secondmate-harness.test.sh
+tests/fm-session-lock-ancestry.test.sh
+tests/fm-session-start.test.sh
+tests/fm-supervision-instructions.test.sh
+tests/fm-turnend-guard.test.sh
+```
+
 ## Semantic busy state
 
 The per-adapter semantic sources behind [`bin/fm-busy-lib.sh`](../../bin/fm-busy-lib.sh) were live-verified on 2026-07-28 against firstmate-launched workers wired exactly as `fm-spawn` writes them.
@@ -271,7 +328,7 @@ tests/fm-pi-primary-types.test.sh
 
 Observed guarantee: after ordinary `session_shutdown` for `/new`, `/resume`, and `/fork`, plus same-instance shutdown-plus-start, the replacement generation armed again without a Pi restart and without the `watcher: not armed - Pi session is shutting down` refusal.
 Stale prior-generation tool callbacks could not mutate the active child, repeated transitions kept exactly one live arm cycle, and terminal `quit` still refused late rearm.
-Plain Pi and pi-signed share the same tracked `.pi/extensions/fm-primary-pi-watch.ts` path, so both inherit the generation owner; other primary harnesses are not applicable because they do not use this Pi extension lifecycle.
+Plain Pi and pi-signed share the same tracked `.pi/extensions/fm-primary-pi-watch.ts` path, so both inherit the generation owner; OMP loads the same tracked extension through `.omp/settings.json` and its continuity was verified separately (see the OMP primary runtime section above), while the remaining primary harnesses are not applicable because they do not use this Pi extension lifecycle.
 
 Deterministic entry points:
 

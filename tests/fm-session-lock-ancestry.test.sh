@@ -134,6 +134,46 @@ SH
   pass "session-lock: ordinary script paths under a harness directory are not harness processes"
 }
 
+test_omp_embedded_pi_prefers_the_pi_lock_owner() {
+  local dir fakebin got
+  dir="$TMP_ROOT/omp-embedded-pi"
+  fakebin=$(fm_fakebin "$dir")
+  mkdir -p "$dir/state"
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+set -u
+field= pid=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) field=$2; shift 2 ;;
+    -p) pid=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+case "$pid:$field" in
+  100:comm=) printf '%s\n' '/opt/pi' ;;
+  100:args=) printf '%s\n' 'pi --resume' ;;
+  100:ppid=) printf '%s\n' 110 ;;
+  110:comm=) printf '%s\n' treehouse ;;
+  110:args=) printf '%s\n' 'treehouse shell' ;;
+  110:ppid=) printf '%s\n' 120 ;;
+  120:comm=) printf '%s\n' bun ;;
+  120:args=) printf '%s\n' '/Users/u/.bun/bin/omp --resume session-id' ;;
+  120:ppid=) printf '%s\n' 1 ;;
+  *:comm=) printf '%s\n' bash ;;
+  *:args=) printf '%s\n' 'bash bin/fm-session-start.sh' ;;
+  *:ppid=) printf '%s\n' 100 ;;
+esac
+SH
+  chmod +x "$fakebin/ps"
+  printf '100\n' > "$dir/state/.lock"
+  got=$(lib_eval "$fakebin" 'fm_harness_ancestry_pid') || fail "embedded Pi ancestry was not resolved"
+  [ "$got" = 100 ] || fail "OMP embedded Pi lock owner resolved '$got', expected Pi pid 100"
+  lib_eval "$fakebin" "fm_session_lock_owned_by_self '$dir/state'" \
+    || fail "embedded Pi process did not recognize its Pi lock owner"
+  pass "session-lock: OMP ancestry keeps the embedded Pi application as lock owner"
+}
+
 test_harness_beyond_a_gap_never_owns_the_lock() {
   local dir fakebin got
   dir="$TMP_ROOT/gap"
@@ -356,6 +396,7 @@ test_e2e_daemon_parented_version_named_session_keeps_its_lock() {
 
 test_version_named_session_is_identified_on_both_platforms
 test_ordinary_paths_are_never_harness_processes
+test_omp_embedded_pi_prefers_the_pi_lock_owner
 test_harness_beyond_a_gap_never_owns_the_lock
 test_competing_version_named_session_is_seen_as_live
 test_e2e_version_named_session_claims_the_home

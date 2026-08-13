@@ -24,7 +24,7 @@ It tokenizes the bytes and classifies lexical execution positions only.
 
 - Stdin JSON at `.tool_input.command` for Claude and Codex.
 - Stdin JSON at `.toolInput.command` for Grok.
-- `--command <exact string>` for OpenCode, Pi, and pi-signed.
+- `--command <exact string>` for OpenCode, Pi, pi-signed, and OMP.
 - `--background` as a compatibility-only field that never changes the decision.
 - `--claude` to preserve Claude's stderr-only deny requirement.
 
@@ -151,7 +151,7 @@ Prose may improve without changing adapter behavior.
 - `--claude` suppresses stdout completely because Claude ignores a PreToolUse deny when stdout is nonempty.
 - Codex blocks on exit 2 and displays stderr.
 - OpenCode throws only when the checker exits 2.
-- Pi and pi-signed return `{block: true}` only when the checker exits 2.
+- Pi, pi-signed, and OMP return `{block: true}` only when the checker exits 2.
 
 ## Harness wiring
 
@@ -161,7 +161,7 @@ Prose may improve without changing adapter behavior.
 | Claude | `.tool_input.command` | `.claude/settings.json` forwards stdin with `--claude`, leaving stdout empty and returning the stderr deny object. |
 | Grok | `.toolInput.command` | `.grok/hooks/fm-primary-pretool-check.json` forwards stdin and Grok consumes the stdout `decision=deny` object. |
 | OpenCode | `output.args.command` | `.opencode/plugins/fm-primary-pretool-check.js` passes one `--command` argument and throws only for exit 2. |
-| Pi / pi-signed | `event.input.command` | `.pi/extensions/fm-primary-turnend-guard.ts` passes one `--command` argument and returns `{block: true}` only for exit 2. |
+| Pi / pi-signed / OMP | `event.input.command` | `.pi/extensions/fm-primary-turnend-guard.ts` passes one `--command` argument and returns `{block: true}` only for exit 2. |
 
 Grok project hooks require folder trust.
 Every shell variable reference in a Grok hook command must carry an inline default such as `${GROK_WORKSPACE_ROOT:-}` because Grok expands the raw hook command before `bash -lc` runs it.
@@ -183,9 +183,10 @@ codex-cli 0.144.0
 grok 0.2.93 (f00f96316d4b)
 OpenCode 1.17.15
 Pi 0.80.5
+OMP 17.3.0
 ```
 
-Every harness was instructed to issue these exact shell command strings as separate tool calls:
+The original five-harness matrix was instructed to issue these exact shell command strings as separate tool calls:
 
 ```sh
 printf 'UNRELATED_EXECUTED\n'
@@ -203,18 +204,21 @@ codex exec --dangerously-bypass-hook-trust --dangerously-bypass-approvals-and-sa
 GROK_HOME="$SCRATCH_GROK_HOME" RUST_LOG=xai_grok_hooks=debug GROK_LOG_FILE="$SCRATCH_LOG" grok --trust -p "$PROMPT" --permission-mode bypassPermissions --output-format plain
 OPENCODE_CONFIG_CONTENT='{"permission":{"*":"allow"}}' opencode run --print-logs --log-level INFO "$PROMPT"
 pi -p -e .pi/extensions/fm-primary-turnend-guard.ts --no-context-files --no-session "$PROMPT"
+omp --auto-approve -e .pi/extensions/fm-primary-turnend-guard.ts -p "$PROMPT"
 ```
 
 Observed output for the four allowed calls was `UNRELATED_EXECUTED`, a successful read-only `pgrep`, `CHECKPOINT_EXECUTED`, and two `TMUX_ARGS:` lines that preserved the watcher text as data.
-Each harness blocked the final command with exit 2 mapped through its native adapter behavior.
+Each harness in that original matrix blocked the final command with exit 2 mapped through its native adapter behavior.
 The stable reason was `[watcher-background] a protected watcher command cannot run in an asynchronous shell list or through nohup/disown`.
 The dummy arm body would have created `<harness>.sentinel` if the denied command executed.
 All five sentinel files remained absent.
 
 The Codex transcript showed `PreToolUse Completed` for all three originally reported false-positive shapes and `PreToolUse Blocked` only for the backgrounded arm.
+The OMP 17.3.0 primary-shaped probe returned `OMP_PRETOOL_DONE`, blocked `bin/fm-watch-arm.sh &`, and left the sentinel arm body absent.
 The Grok debug transcript showed four exit-0 results from `project/fm-primary-pretool-check`, then exit 2 with 145 stdout bytes, 214 stderr bytes, and `hook denied` for the backgrounded arm.
 OpenCode displayed the four allowed command outputs and then `bin/fm-watch-arm.sh & failed` with the stderr deny object.
 Claude and Pi both reported that calls one through four ran and the final call was blocked.
+The OMP probe was a separate primary-shaped run because its embedded Pi TUI transport is not part of the five historical command-field fixtures.
 
 Native supervision paths were also validated in the same scratch project:
 
@@ -223,6 +227,7 @@ Native supervision paths were also validated in the same scratch project:
 - Codex ran the foreground checkpoint above and produced `CHECKPOINT_EXECUTED`.
 - OpenCode ran in an interactive TUI on `tmux -L fm-pretool-smoke`, reached `session.idle`, and its unchanged watch-arm plugin created the scratch automatic-arm marker.
 - Pi loaded both primary extensions, called `fm_watch_arm_pi`, and created the scratch automatic-arm marker.
+- OMP loaded the same primary turn-end extension and blocked the watcher-arm anti-pattern through its embedded Pi `tool_call` callback.
 
 Every native-path automatic marker was present and every deny sentinel remained absent.
 
