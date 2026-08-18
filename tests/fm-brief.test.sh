@@ -371,6 +371,29 @@ test_ship_project_memory_wording() {
   pass "fm-brief.sh: ship project-memory wording carries the AGENTS.md authoring bar"
 }
 
+# Every ship mode reaches an implementation worker, so the scaffold must carry
+# the one-owner method reference without copying the method or weakening the
+# project's own contracts and selected delivery path.
+test_ship_briefs_load_progressive_assurance_owner() {
+  local home id mode brief
+  home="$TMP_ROOT/progressive-assurance-home"
+  mkdir -p "$home/data"
+
+  for mode in no-mistakes direct-PR local-only; do
+    id="brief-progressive-$mode"
+    FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+      "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1
+    brief="$home/data/$id/brief.md"
+    assert_grep "# Engineering and verification method" "$brief" \
+      "$mode ship brief omitted the method section"
+    assert_grep "$ROOT/.agents/skills/progressive-assurance-engineering/SKILL.md" "$brief" \
+      "$mode ship brief omitted the absolute progressive-assurance owner"
+    assert_grep "apply it alongside the project's more specific contracts and this task's selected delivery path" "$brief" \
+      "$mode ship brief widened the method beyond project and delivery contracts"
+  done
+  pass "fm-brief.sh: every ship mode loads the progressive-assurance owner"
+}
+
 test_herdr_lab_contract_is_explicit_and_complete() {
   local home id brief
   home="$TMP_ROOT/herdr-lab-home"
@@ -718,6 +741,7 @@ test_delivery_flags_are_refused_where_they_do_not_apply
 test_faster_paths_use_configured_authority_without_stacked_review
 test_no_mistakes_dod_wording
 test_ship_project_memory_wording
+test_ship_briefs_load_progressive_assurance_owner
 test_herdr_lab_contract_is_explicit_and_complete
 test_herdr_lab_contract_quotes_foreign_firstmate_path
 test_herdr_lab_omission_is_loud_for_ship_and_scout
