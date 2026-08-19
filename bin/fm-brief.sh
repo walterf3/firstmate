@@ -54,6 +54,9 @@
 # it carries the AGENTS.md authoring bar (widely useful knowledge only, pointers
 # over copied detail) and has the crewmate add the fm-ensure-agents-md.sh
 # self-governance section when a touched project AGENTS.md lacks it.
+# Ship tasks also carry the Firstmate-wide progressive-assurance skill pointer;
+# that skill owns engineering and verification sequencing alongside the project's
+# own contracts and the task's selected delivery path.
 # Refuses to overwrite an existing brief.
 set -eu
 
@@ -414,6 +417,10 @@ You are a crewmate: an autonomous worker agent managed by firstmate. Work on you
 {TASK}
 
 $HERDR_SECTION
+
+# Engineering and verification method
+Before mutable implementation or verification, read and follow \`$FM_ROOT/.agents/skills/progressive-assurance-engineering/SKILL.md\`.
+That skill owns the Firstmate-wide default sequence; apply it alongside the project's more specific contracts and this task's selected delivery path.
 
 # Setup
 You are in a disposable git worktree of $REPO, at a detached HEAD on a clean default branch.
