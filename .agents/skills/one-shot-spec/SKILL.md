@@ -19,6 +19,7 @@ Keeping this adapter thin is deliberate, because a second description of the pro
 
 [`references/ONE_SHOT_SPEC_PROTOCOL.md`](references/ONE_SHOT_SPEC_PROTOCOL.md) is the complete protocol and its only owner in this repository.
 It is vendored verbatim from `ONE_SHOT_SPEC_PROTOCOL` version 2.4, last updated 2026-05-10, SHA-256 `288384e2fdaae4f9e068fdf1d99e05754855a9facd185c941154ef229b332ddc`.
+The upstream owner is `engineering/ONE_SHOT_SPEC_PROTOCOL.md` in the captain's engineering docs corpus, which lives outside this repository and is never read at run time, so re-vendoring a newer version means copying that file byte-for-byte and updating the version, date, and hash recorded here.
 The vendored bytes are unmodified, so `shasum -a 256` over that file still prints the hash above, and a mismatch means the copy drifted and must be reported before any run.
 Read the reference before running, then follow its inputs, gates, promotion ladders, scoring model, stop rules, and hard gates exactly as written.
 This file never restates, summarizes, or relaxes a protocol requirement, so an apparent conflict between the two resolves in the reference's favor and is reported rather than reconciled here.
