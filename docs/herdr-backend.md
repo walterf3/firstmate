@@ -348,6 +348,10 @@ Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never 
 - Mutable labels can collide; they are never placement or destructive authority.
 - A Firstmate outside Herdr cannot resolve a launcher workspace, so a colliding home label refuses new spawns until the collision is cleared.
 - Ghost and placeholder recognition depends on ANSI de-emphasis and fails safely to pending when unavailable.
+- A Herdr plugin that opens its own pane from a `workspace.created` or `tab.created` hook races every projected spawn.
+  It splits into the workspace Firstmate is still assembling, so the projection cannot reach exactly one task pane and the spawn stops, and it later keeps an emptied home workspace alive so the next spawn adopts it instead of creating a fresh one.
+  Firstmate never closes such a pane, and the exactly-one-task-pane invariant is deliberately retained rather than widened to tolerate foreign panes.
+  Hook that kind of plugin to `tab.focused` and `pane.focused` instead, which still opens its pane as soon as the workspace is actually looked at.
 - Mid-session secondmate liveness is not implemented.
 - OpenCode 1.18.4 can accept Enter while busy without clearing the composer.
   The tmux backend has a busy-queue fallback, but Herdr still reports this case as submit pending and needs a separate adapter fix.
