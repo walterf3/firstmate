@@ -1456,6 +1456,32 @@ fm_backend_herdr_launcher_identity() {  # <session>
 # unforeseen path landing a live agent in a tab this function was about to
 # close.
 #
+# Wrong-pane incident fix (2026-08-22): the created-versus-adopted gate above
+# makes the TAB exact, but the pane to close was still re-derived from tab
+# membership (fm_backend_herdr_pane_for_tab, which returns the listed-FIRST
+# pane carrying that tab_id). A herdr workspace tab is not permanently
+# single-pane: anything holding the session socket can split a second pane
+# into it, and a herdr plugin subscribed to `workspace.created` does exactly
+# that within tens of milliseconds of the create this prune follows. When the
+# split pane sorted first, firstmate closed a pane it never created and left
+# the seeded tab alive, which then failed the projection's exact
+# one-task-pane convergence check and the whole spawn with it. The fix is the
+# same shape as the 2026-07-02 one: stop re-deriving. The pane is resolved
+# through fm_backend_herdr_sole_pane_for_tab, so a seeded tab that no longer
+# consists of exactly one pane resolves to nothing and is left alone, and
+# <seeded_pane_id> (below) pins the survivor to the exact created pane.
+#
+# <seeded_pane_id> (5th arg, optional) is the `.result.root_pane.pane_id` the
+# SAME `workspace create` response returned alongside <seeded_tab_id>. When
+# supplied, the resolved sole pane must equal it exactly, which additionally
+# refuses a seeded tab whose original root pane was replaced by exactly one
+# foreign pane. Callers that never captured it pass nothing and keep the
+# sole-pane guarantee alone.
+#
+# Both refusals warn on stderr rather than staying silent: the incident above
+# surfaced only as a downstream convergence error that named the symptom, and
+# a silent best-effort skip is what made it undiagnosable from its own output.
+#
 # Verified real-herdr behavior (not modeled by the canned-response fake-CLI
 # unit tests; modeled by make_herdr_statefake): closing a workspace's LAST
 # remaining tab deletes the whole workspace, not just the tab. So this must
@@ -1463,16 +1489,23 @@ fm_backend_herdr_launcher_identity() {  # <session>
 # workspace - callers only invoke it once at least one other (real task) tab
 # exists alongside it, never right after workspace creation - and this
 # function independently re-checks the tab count as a second layer.
-fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_id> <seeded_tab_id> [focus-preserving]
-  local session=$1 wsid=$2 tab_id=$3 close_mode=${4:-direct} tabs tab_count current_label pane_id agent_out agent_status
+fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_id> <seeded_tab_id> [<close-mode>] [<seeded_pane_id>]
+  local session=$1 wsid=$2 tab_id=$3 close_mode=${4:-direct} seeded_pane=${5:-}
+  local tabs tab_count current_label pane_id agent_out agent_status
   [ -n "$tab_id" ] || return 0
   tabs=$(fm_backend_herdr_cli "$session" tab list --workspace "$wsid" 2>/dev/null) || return 0
   tab_count=$(printf '%s' "$tabs" | jq -r '.result.tabs? // [] | length' 2>/dev/null)
   case "$tab_count" in ''|*[!0-9]*|0|1) return 0 ;; esac
   current_label=$(printf '%s' "$tabs" | jq -r --arg t "$tab_id" '.result.tabs[]? | select(.tab_id == $t) | .label' 2>/dev/null)
   [ "$current_label" = "1" ] || return 0
-  pane_id=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$tab_id") || return 0
-  [ -n "$pane_id" ] || return 0
+  if ! pane_id=$(fm_backend_herdr_sole_pane_for_tab "$session" "$wsid" "$tab_id"); then
+    echo "warning: herdr seeded default tab $tab_id in workspace $wsid (session $session) no longer holds exactly one pane; leaving it in place rather than closing a pane firstmate did not create" >&2
+    return 0
+  fi
+  if [ -n "$seeded_pane" ] && [ "$pane_id" != "$seeded_pane" ]; then
+    echo "warning: herdr seeded default tab $tab_id in workspace $wsid (session $session) holds $pane_id instead of the created $seeded_pane; leaving it in place rather than closing a pane firstmate did not create" >&2
+    return 0
+  fi
   agent_out=$(fm_backend_herdr_cli "$session" agent get "$pane_id" 2>/dev/null)
   agent_status=$(printf '%s' "$agent_out" | jq -r '.result.agent.agent_status // empty' 2>/dev/null)
   [ "$agent_status" = working ] && return 0
@@ -1933,7 +1966,8 @@ fm_backend_herdr_projection_create_task() {  # <cwd> <workspace-label> <task-lab
     "$session" \
     "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" \
     "$FM_BACKEND_HERDR_PROJECTION_SEEDED_TAB_ID" \
-    focus-preserving; then
+    focus-preserving \
+    "$FM_BACKEND_HERDR_PROJECTION_SEEDED_PANE_ID"; then
     echo "error: herdr presentation seeded-tab prune refused a focus-unsafe close; leaving its journal quarantined" >&2
     return 1
   fi
@@ -3040,6 +3074,30 @@ fm_backend_herdr_pane_for_tab() {  # <session> <workspace_id> <tab_id>
   panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
   printf '%s' "$panes" | jq -r --arg tab "$tab_id" \
     '.result.panes[]? | select(.tab_id == $tab) | .pane_id' 2>/dev/null | head -1
+}
+
+# fm_backend_herdr_sole_pane_for_tab: the pane id of <tab_id> in <workspace_id>
+# ONLY when that tab holds exactly one pane.
+# Unlike fm_backend_herdr_pane_for_tab, which answers "some pane in this tab"
+# and is correct for read-only classification, this answers "the one pane this
+# tab consists of" and is the resolver every CLOSE path must use: a tab holding
+# a second pane is a tab something else has split into, and its listed-first
+# pane is not necessarily the one firstmate created.
+# Prints nothing and returns 1 for zero panes, more than one pane, a failed
+# call, or an unparseable list, so an inconclusive read can never be mistaken
+# for a resolved close target.
+fm_backend_herdr_sole_pane_for_tab() {  # <session> <workspace_id> <tab_id>
+  local session=$1 wsid=$2 tab_id=$3 panes pane_id
+  panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
+  pane_id=$(printf '%s' "$panes" | jq -er --arg tab "$tab_id" '
+    select((.result.panes | type) == "array")
+    | [.result.panes[] | select(.tab_id == $tab)]
+    | select(length == 1)
+    | .[0].pane_id
+    | select(type == "string" and length > 0)
+  ' 2>/dev/null) || return 1
+  [ -n "$pane_id" ] || return 1
+  printf '%s' "$pane_id"
 }
 
 # fm_backend_herdr_resolve_bare_selector: the live-tab-listing fallback for an

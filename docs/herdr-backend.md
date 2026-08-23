@@ -168,10 +168,15 @@ An adopted workspace never supplies that id and can never enter the prune path, 
 Immediately before close, Firstmate rechecks the exact tab, expected seed label, and native agent state.
 A working seed pane is never closed.
 
-This created-versus-adopted gate is a destructive safety boundary.
+The pane that close targets is equally exact.
+A Herdr tab is not permanently single-pane, so Firstmate closes the seeded tab's pane only while that tab still consists of exactly one pane, and the projected path additionally requires that pane to be the exact root pane its own create response returned.
+A seeded tab something else has split a second pane into is left entirely alone with a warning naming the workspace and session, because Firstmate never closes a pane it did not create.
+
+This created-versus-adopted gate is a destructive safety boundary, and so is that exact-pane rule.
 A prior label heuristic could adopt a captain-owned workspace named `firstmate` and close its live seed-shaped tab.
-The current structural gate removes label inference from cleanup authority.
-`tests/fm-backend-herdr-prune-safety-e2e.test.sh` reproduces the collision in an isolated named session and proves the adopted pane remains untouched.
+A later tab-membership lookup could still close whichever pane the seeded tab listed first, which is not the created pane once a Herdr plugin subscribed to `workspace.created` splits its own pane in and swaps it to the dock edge.
+The current structural gates remove both label inference and list-order inference from cleanup authority.
+`tests/fm-backend-herdr-prune-safety-e2e.test.sh` reproduces the label collision and the foreign-split shape in an isolated named session and proves the adopted pane and the foreign pane both remain untouched.
 
 ## Endpoint metadata
 
