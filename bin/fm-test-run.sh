@@ -936,7 +936,10 @@ families_for_changed_path() {
       printf '%s\n' pure-contract-unit
       printf '%s\n' live-harness-optin
       ;;
-    .agents/skills/*/SKILL.md)
+    .agents/skills/*)
+      # Matches the whole skill directory, not only SKILL.md: a vendored
+      # reference beside a SKILL.md is part of that skill's loaded contract, so
+      # changing it re-runs the same coverage as editing the skill itself.
       printf '%s\n' pure-contract-unit
       ;;
     .github/workflows/ci.yml|.no-mistakes.yaml)
