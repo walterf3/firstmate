@@ -212,7 +212,9 @@ HERDR_LAB_HELPER=bin/fm-herdr-lab.sh \
 
 Observed guarantee: a pre-existing captain-owned workspace with a seed-shaped tab was adopted for routing but its tab was never eligible for prune because the current create call did not return that seed id.
 
-The same command owns the exact-pane guarantee, re-checked on 2026-08-22 against Herdr 0.8.0 protocol 19.
+The same command owns the exact-pane guarantee, re-checked on 2026-08-22 against Herdr 0.8.0 protocol 19 in a session that already had a focused workspace.
+That precondition is load-bearing: the guard reaches its foreign-split assertion only in a session that already has a focused workspace.
+In a session whose first workspace is created into an empty session, Herdr focuses that workspace despite `--no-focus`, a plugin hooked to `pane.focused` docks its own pane into the seeded tab about a second later, and the suite stops earlier at its happy-path step, so the foreign-split assertion never executes there.
 Observed guarantee: a seeded default tab a third party had split a second pane into was left entirely alone, with both the foreign pane and the created pane still present, and the run reported why:
 
 ```text
