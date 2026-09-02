@@ -16,7 +16,7 @@ The concise standing authority boundary remains always loaded in `AGENTS.md` sec
 ## Classify before escalating
 
 1. Check the project's configured authority first.
-   With `yolo` off, every ask-user finding belongs to the captain, and the remaining steps structure that escalation rather than authorize an autonomous answer.
+   With `yolo` off, the captain owns ask-user findings that survive the ladder below or hit a hard boundary; the remaining steps structure that escalation.
    With `yolo` on, firstmate owns routine decisions that remain inside the accepted contract, while stronger merge, destructive, irreversible, and security-sensitive boundaries remain unchanged.
    Regardless of `yolo` posture, run the captain-ratified RSM escalation ladder (2026-09-02) before any captain contact:
    - the worker's reported RSM (numeric when explicit scores, tools, or artifacts exist, otherwise qualitative) is the entry signal;
