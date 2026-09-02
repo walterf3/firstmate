@@ -755,7 +755,7 @@ test_rsm_reporting_renders_literally_in_all_brief_scaffolds() {
     # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
     assert_grep '`RSM=low (missing baseline)`' "$brief" \
       "$kind brief did not render the qualitative RSM example literally"
-    assert_grep 'omitting it routes your gate to the top of the ladder by default' "$brief" \
+    assert_grep 'climbs the full ladder from the oracle rung before any captain contact' "$brief" \
       "$kind brief did not state the omission default"
   done
   pass "fm-brief.sh: RSM reporting requirement renders literally in every scaffold"

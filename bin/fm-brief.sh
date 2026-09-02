@@ -245,7 +245,7 @@ Use this only for material phase changes, a captain decision, a real blocker, a 
 Every \`done:\`, \`failed:\`, and \`needs-decision:\` line also carries your confidence in that outcome
 as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit scores, tools,
 or artifacts exist, qualitative otherwise (for example \`RSM≈0.85\` or \`RSM=low (missing baseline)\`);
-firstmate resolves escalation through your reported RSM, so omitting it routes your gate to the top of the ladder by default.
+firstmate resolves escalation through your reported RSM, so omitting it is treated as unmeasurable RSM and climbs the full ladder from the oracle rung before any captain contact.
 This is also how you return the answer to a marked from-firstmate request above.
 A marked request requires one correlated answer after the work; it does not require a separate receipt or start acknowledgement.
 Never append \`working:\` merely to acknowledge receipt or announce that a marked request has started.
@@ -333,7 +333,7 @@ The report is the only thing that survives, so anything worth keeping must be in
    outcome as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit
    scores, tools, or artifacts exist, qualitative otherwise (for example \`RSM≈0.85\` or
    \`RSM=low (missing baseline)\`); firstmate resolves escalation through your reported RSM,
-   so omitting it routes your gate to the top of the ladder by default.
+   so omitting it is treated as unmeasurable RSM and climbs the full ladder from the oracle rung before any captain contact.
    Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
    known external wait you expect to clear on its own (an upstream release, a rate-limit reset):
    firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of
@@ -455,7 +455,7 @@ $RULE1
    outcome as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit
    scores, tools, or artifacts exist, qualitative otherwise (for example \`RSM≈0.85\` or
    \`RSM=low (missing baseline)\`); firstmate resolves escalation through your reported RSM,
-   so omitting it routes your gate to the top of the ladder by default.
+   so omitting it is treated as unmeasurable RSM and climbs the full ladder from the oracle rung before any captain contact.
    A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the
    turn after it; continue the same stage until a defined \`done:\` gate under Definition of done.
    Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
