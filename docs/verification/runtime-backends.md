@@ -167,7 +167,7 @@ Claude, Codex, OpenCode, OMP, Pi, pi-signed, Grok, and Kimi share that backend c
 ## Herdr
 
 The compatibility floor is protocol 14.
-The presentation-projection suite's latest active verification uses Herdr 0.8.0 protocol 19 on macOS aarch64, every other section's latest uses Herdr 0.7.5 protocol 17 on macOS aarch64, and earlier 0.7.5 protocol-16, 0.7.4, protocol-14, and 0.7.3 evidence is retained where it defines current behavior or fallbacks.
+The presentation-projection and prune-safety suites' latest active verification uses Herdr 0.8.0 protocol 19 on macOS aarch64, every other section's latest uses Herdr 0.7.5 protocol 17 on macOS aarch64, and earlier 0.7.5 protocol-16, 0.7.4, protocol-14, and 0.7.3 evidence is retained where it defines current behavior or fallbacks.
 Protocol 17 keeps every protocol-16 feature gate satisfied; the event and workspace-move floors remain 16.
 
 Core read-only probes:
@@ -211,6 +211,25 @@ HERDR_LAB_HELPER=bin/fm-herdr-lab.sh \
 ```
 
 Observed guarantee: a pre-existing captain-owned workspace with a seed-shaped tab was adopted for routing but its tab was never eligible for prune because the current create call did not return that seed id.
+
+The same command owns the exact-pane guarantee, re-checked on 2026-08-22 against Herdr 0.8.0 protocol 19 in a session that already had a focused workspace.
+That precondition is load-bearing: the guard reaches its foreign-split assertion only in a session that already has a focused workspace.
+In a session whose first workspace is created into an empty session, Herdr focuses that workspace despite `--no-focus`, a plugin hooked to `pane.focused` docks its own pane into the seeded tab about a second later, and the suite stops earlier at its happy-path step, so the foreign-split assertion never executes there.
+Observed guarantee: a seeded default tab a third party had split a second pane into was left entirely alone, with both the foreign pane and the created pane still present, and the run reported why:
+
+```text
+ok - repro setup: a foreign pane shares the seeded default tab and lists before the pane firstmate created
+warning: herdr seeded default tab w4:t1 in workspace w4 (session fm-lab-prune-safety-e2e-5930) no longer holds exactly one pane; leaving it in place rather than closing a pane firstmate did not create
+ok - fixed: a seeded default tab a third party has split into is left entirely alone - the 2026-08-22 wrong-pane incident does not reproduce
+```
+
+The ordering the guard reproduces is the real one: an installed plugin hooked to `workspace.created` split its own pane into a freshly created workspace and swapped it to the dock edge, after which `pane list` returned that foreign pane before the created root pane.
+
+```text
+t+6s: [{"pane_id":"w2:p2","tab_id":"w2:t1"},{"pane_id":"w2:p1","tab_id":"w2:t1"}]
+```
+
+Against the pre-fix adapter the tab-membership lookup resolved that first entry and closed it, which is what `tests/fm-backend-herdr.test.sh` now pins portably without a real Herdr.
 
 Restart-husk replacement is owned by:
 

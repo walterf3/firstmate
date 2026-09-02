@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # tests/fm-backend-herdr-prune-safety-e2e.test.sh - isolated real-herdr
-# regression test for the 2026-07-02 self-kill incident and its fix
-# (bin/backends/herdr.sh's created-vs-adopted default-tab-prune gate; see
-# docs/herdr-backend.md "Default-tab prune" / the incident writeup there).
+# regression test for the 2026-07-02 self-kill incident and the 2026-08-22
+# wrong-pane incident and their fixes (bin/backends/herdr.sh's
+# created-vs-adopted default-tab-prune gate and its exact sole-pane resolver;
+# see docs/herdr-backend.md "Default-tab prune safety").
 #
 # Reproduces the exact collision shape against a private, throwaway
 # HERDR_SESSION (never the captain's default): a startup-workspace-shaped
@@ -13,8 +14,11 @@
 # create_task path and asserts the live pane (and its live process) survive
 # untouched. Also exercises the normal happy path (a genuinely fresh
 # workspace's seeded default tab gets pruned, leaving exactly one clean
-# fm-<id> task tab), mirroring tests/fm-backend-herdr-smoke.test.sh's broader
-# coverage but scoped tightly to this one safety property.
+# fm-<id> task tab), then reproduces the wrong-pane shape (a third party
+# split a second pane into the seeded default tab and it lists first) and
+# asserts neither pane is closed, mirroring
+# tests/fm-backend-herdr-smoke.test.sh's broader coverage but scoped tightly
+# to this one destructive-safety boundary.
 #
 # Safety (tests/herdr-test-safety.sh): cleanup uses ONLY
 # herdr_safe_stop_and_delete, never a bare/inline-prefixed `herdr server
@@ -175,6 +179,53 @@ printf '%s' "$HAPPY_TABS" | jq -e --arg t "$HAPPY_SEEDED" '.result.tabs[] | sele
 pass "happy path: a genuinely fresh workspace's seeded default tab is still pruned, leaving exactly one clean fm-<id> task tab"
 
 fm_backend_herdr_kill "$SESSION:$HAPPY_PANE"
+
+# --- 5. reproduce the 2026-08-22 wrong-pane shape ---------------------------
+# A genuinely fresh workspace whose seeded default tab a third party has since
+# split a second pane into. In the incident a herdr plugin subscribed to
+# workspace.created did this within tens of milliseconds of the create, and
+# its split-then-swap left the foreign pane listed first, so the prune's
+# tab-membership re-derivation closed a pane firstmate never created. Both
+# panes must now survive.
+
+SPLIT_CWD="$SCRATCH/split-project"
+mkdir -p "$SPLIT_CWD"
+SPLIT_RAW=$(fm_backend_herdr_container_ensure "$SPLIT_CWD") || fail "foreign-split container_ensure failed"
+SPLIT_CONTAINER=${SPLIT_RAW%%$'\t'*}
+SPLIT_SEEDED=${SPLIT_RAW#*$'\t'}
+[ -n "$SPLIT_SEEDED" ] || fail "foreign-split setup: expected a genuinely fresh workspace with a non-empty seeded default tab id"
+SPLIT_WSID=${SPLIT_CONTAINER#*:}
+SPLIT_SEEDED_PANE=$(fm_backend_herdr_cli "$SESSION" pane list --workspace "$SPLIT_WSID" 2>/dev/null \
+  | jq -r --arg t "$SPLIT_SEEDED" '.result.panes[]? | select(.tab_id == $t) | .pane_id' | head -1)
+[ -n "$SPLIT_SEEDED_PANE" ] || fail "foreign-split setup: could not resolve the seeded default tab's pane"
+
+FOREIGN_PANE=$(fm_backend_herdr_cli "$SESSION" pane split --pane "$SPLIT_SEEDED_PANE" --direction right --no-focus 2>/dev/null \
+  | jq -r '.result.pane.pane_id // empty')
+[ -n "$FOREIGN_PANE" ] || fail "foreign-split setup: could not split a second pane into the seeded default tab"
+fm_backend_herdr_cli "$SESSION" pane swap --source-pane "$FOREIGN_PANE" --target-pane "$SPLIT_SEEDED_PANE" >/dev/null 2>&1 \
+  || fail "foreign-split setup: could not reproduce the plugin's split-then-swap ordering"
+FIRST_LISTED=$(fm_backend_herdr_cli "$SESSION" pane list --workspace "$SPLIT_WSID" 2>/dev/null \
+  | jq -r --arg t "$SPLIT_SEEDED" '.result.panes[]? | select(.tab_id == $t) | .pane_id' | head -1)
+[ "$FIRST_LISTED" = "$FOREIGN_PANE" ] \
+  || fail "foreign-split setup: the foreign pane should list first after the swap (got '$FIRST_LISTED') - the repro would not exercise the defect"
+pass "repro setup: a foreign pane shares the seeded default tab and lists before the pane firstmate created"
+
+SPLIT_TASK_IDS=$(fm_backend_herdr_create_task "$SPLIT_CONTAINER" fm-prunesafety-split "$SPLIT_CWD" "$SPLIT_SEEDED") \
+  || fail "foreign-split create_task failed"
+read -r _SPLIT_TAB SPLIT_TASK_PANE <<EOF
+$SPLIT_TASK_IDS
+EOF
+[ -n "$SPLIT_TASK_PANE" ] || fail "foreign-split create_task did not return a pane id"
+
+fm_backend_herdr_cli "$SESSION" pane get "$FOREIGN_PANE" >/dev/null 2>&1 \
+  || fail "REGRESSION (2026-08-22 wrong-pane): create_task closed the foreign pane it never created"
+fm_backend_herdr_cli "$SESSION" pane get "$SPLIT_SEEDED_PANE" >/dev/null 2>&1 \
+  || fail "REGRESSION: create_task closed the seeded pane while a foreign pane shared its tab"
+pass "fixed: a seeded default tab a third party has split into is left entirely alone - the 2026-08-22 wrong-pane incident does not reproduce"
+
+fm_backend_herdr_kill "$SESSION:$SPLIT_TASK_PANE"
+fm_backend_herdr_kill "$SESSION:$FOREIGN_PANE"
+fm_backend_herdr_kill "$SESSION:$SPLIT_SEEDED_PANE"
 
 cleanup_all
 trap - EXIT

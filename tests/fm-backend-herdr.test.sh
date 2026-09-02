@@ -75,8 +75,14 @@ SH
 # create` seeds the new workspace with one auto-created default tab (label
 # "1") and returns that tab's tab_id/pane_id in the SAME response
 # (`.result.tab.tab_id` / `.result.root_pane.pane_id`, verified empirically
-# against the real binary); `pane close` removes the pane's single-pane tab
-# (closing a tab's only pane closes the tab); `workspace list` / `tab list` /
+# against the real binary); a tab may hold more than one pane once something
+# else splits into it (fake_herdr_split_pane), and `pane list` then reports
+# every pane in the workspace with split panes listed BEFORE tab root panes -
+# the adversarial order the 2026-08-22 wrong-pane incident actually produced,
+# where a plugin's split-then-swap put its own pane first; `pane close`
+# removes the pane's single-pane tab (closing a tab's only pane closes the
+# tab) but only removes the pane and promotes a sibling to root when the tab
+# holds more than one; `workspace list` / `tab list` /
 # `pane list` reflect live state; `agent get <pane>` reports the pane's preset
 # agent_status (set via fake_herdr_set_agent_status, never through a CLI
 # call - mirrors an out-of-band agent registering itself) or an
@@ -86,7 +92,7 @@ SH
 make_herdr_statefake() {  # <dir> -> echoes fakebin dir; seeds an empty state file
   local dir=$1 fb="$1/fakebin"
   mkdir -p "$fb"
-  printf '{"next":1,"workspaces":[],"tabs":[],"agent_status":{}}\n' > "$dir/state.json"
+  printf '{"next":1,"workspaces":[],"tabs":[],"extra_panes":[],"agent_status":{}}\n' > "$dir/state.json"
   cat > "$fb/herdr" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -139,11 +145,29 @@ case "$cmd $sub" in
     printf '{"result":{"tab":{"tab_id":"%s"},"root_pane":{"pane_id":"%s"}}}\n' "$tabid" "$paneid"
     ;;
   "pane list")
-    jq_state --arg w "$ws" '{result:{panes:[.tabs[]|select(.workspace_id==$w)|{pane_id:.pane_id, tab_id:.tab_id}]}}'
+    jq_state --arg w "$ws" '{result:{panes:
+      [(.extra_panes // [])[]|select(.workspace_id==$w)|{pane_id:.pane_id, tab_id:.tab_id}]
+      + [.tabs[]|select(.workspace_id==$w)|{pane_id:.pane_id, tab_id:.tab_id}]}}'
     ;;
   "pane close")
     pane=${3:-}
-    jq_state --arg p "$pane" '.tabs |= [.[]|select(.pane_id != $p)]' | save
+    jq_state --arg p "$pane" '
+      ((.extra_panes // [])) as $extra
+      | if ($extra | any(.pane_id == $p)) then
+          .extra_panes = [$extra[] | select(.pane_id != $p)]
+        else
+          ([.tabs[] | select(.pane_id == $p)] | first) as $tab
+          | if $tab == null then .
+            else
+              ([$extra[] | select(.tab_id == $tab.tab_id)] | first) as $promote
+              | if $promote == null then
+                  .tabs = [.tabs[] | select(.pane_id != $p)]
+                else
+                  .tabs = [.tabs[] | if .pane_id == $p then .pane_id = $promote.pane_id else . end]
+                  | .extra_panes = [$extra[] | select(.pane_id != $promote.pane_id)]
+                end
+            end
+        end' | save
     ;;
   "tab close")
     tab=${3:-}
@@ -174,6 +198,18 @@ SH
 fake_herdr_set_agent_status() {  # <state-file> <pane_id> <status>
   local state=$1 pane=$2 status=$3 tmp="$1.tmp.$$"
   jq --arg p "$pane" --arg s "$status" '.agent_status[$p] = $s' "$state" > "$tmp" && mv "$tmp" "$state"
+}
+
+# fake_herdr_split_pane: add <pane_id> to <tab_id> in the stateful fake,
+# mirroring a third party splitting a second pane into a tab firstmate created
+# (a herdr plugin subscribed to workspace.created does exactly this) - never
+# through a CLI call the adapter itself makes. The new pane lists before the
+# tab's root pane, reproducing the ordering the wrong-pane incident produced.
+fake_herdr_split_pane() {  # <state-file> <workspace_id> <tab_id> <pane_id>
+  local state=$1 wsid=$2 tab=$3 pane=$4 tmp="$1.tmp.$$"
+  jq --arg w "$wsid" --arg t "$tab" --arg p "$pane" \
+    '.extra_panes = ((.extra_panes // []) + [{pane_id:$p, tab_id:$t, workspace_id:$w}])' \
+    "$state" > "$tmp" && mv "$tmp" "$state"
 }
 
 # herdr_case <name> -> sets up FM_HERDR_LOG/FM_HERDR_RESPONSES/fb for one test,
@@ -3665,6 +3701,101 @@ EOF
   pass "fm_backend_herdr_workspace_prune_seeded_default_tab: refuses to close the seeded default tab when its pane reports a working agent (defense in depth)"
 }
 
+test_prune_refuses_when_a_foreign_pane_shares_the_seeded_tab() {
+  # 2026-08-22 wrong-pane incident: the created-versus-adopted gate makes the
+  # seeded TAB exact, but the pane was re-derived from tab membership and the
+  # listed-first pane won. A herdr plugin subscribed to workspace.created
+  # splits its own pane into the brand-new workspace tens of milliseconds
+  # after the create this prune follows, and its split-then-swap lists that
+  # foreign pane first, so firstmate closed a pane it never created and left
+  # the seeded tab alive. The prune must now close nothing at all here.
+  local dir log state fb raw container seeded seeded_pane out ids pane
+  dir="$TMP_ROOT/prune-foreign-pane"; mkdir -p "$dir"; log="$dir/log"; state="$dir/state.json"; : > "$log"
+  fb=$(make_herdr_statefake "$dir")
+  raw=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_FAKE_HERDR_STATE="$state" HERDR_SESSION=fmtest \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_container_ensure /proj' "$ROOT" ) \
+    || fail "container_ensure failed against the stateful fake"
+  container=${raw%%$'\t'*}
+  seeded=${raw#*$'\t'}
+  [ -n "$seeded" ] || fail "expected a freshly created workspace to report a seeded default tab id"
+  seeded_pane=$(jq -r --arg t "$seeded" '.tabs[] | select(.tab_id == $t) | .pane_id' "$state")
+  [ -n "$seeded_pane" ] || fail "could not resolve the seeded default tab's pane id from state"
+  fake_herdr_split_pane "$state" "${container#*:}" "$seeded" foreign-pane-1
+
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_FAKE_HERDR_STATE="$state" HERDR_SESSION=fmtest \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_create_task "$1" "$2" /proj "$3"' \
+    "$ROOT" "$container" "fm-foreignpane" "$seeded" 2>"$dir/err" ) \
+    || fail "create_task must still succeed when the prune declines"
+  ids=$out
+  read -r _ pane <<EOF
+$ids
+EOF
+  [ -n "$pane" ] || fail "create_task returned no pane id"
+
+  jq -e --arg p foreign-pane-1 '(.extra_panes // []) | any(.pane_id == $p)' "$state" >/dev/null \
+    || fail "the foreign split pane was closed - firstmate must never close a pane it did not create"
+  jq -e --arg t "$seeded" '.tabs[] | select(.tab_id == $t)' "$state" >/dev/null \
+    || fail "the seeded default tab was removed even though a foreign pane shares it"
+  assert_not_contains "$(cat "$log")" $'\x1f''pane'$'\x1f''close'$'\x1f''foreign-pane-1' \
+    "the prune closed the foreign split pane (the exact 2026-08-22 wrong-pane defect)"
+  assert_not_contains "$(cat "$log")" $'\x1f''pane'$'\x1f''close'$'\x1f'"$seeded_pane" \
+    "the prune closed the seeded pane while a foreign pane shared its tab"
+  assert_contains "$(cat "$dir/err")" "no longer holds exactly one pane" \
+    "the prune declined silently instead of naming why it left the seeded tab alone"
+  pass "fm_backend_herdr_workspace_prune_seeded_default_tab: closes nothing when a foreign pane shares the seeded default tab"
+}
+
+test_prune_refuses_a_seeded_tab_whose_sole_pane_is_not_the_created_one() {
+  # The optional created-pane argument pins the survivor: a seeded tab that
+  # holds exactly one pane which is NOT the root pane the same workspace-create
+  # response returned is a tab something else has already reshaped, so the
+  # sole-pane count alone must not authorize the close.
+  local dir log resp fb out status
+  dir="$TMP_ROOT/prune-wrong-sole-pane"; mkdir -p "$dir/responses"
+  log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"tabs":[{"tab_id":"w9:t1","label":"1","workspace_id":"w9"},{"tab_id":"w9:t2","label":"fm-task","workspace_id":"w9"}]}}\n' > "$resp/1.out"
+  printf '{"result":{"panes":[{"pane_id":"w9:pX","tab_id":"w9:t1"},{"pane_id":"w9:p2","tab_id":"w9:t2"}]}}\n' > "$resp/2.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_workspace_prune_seeded_default_tab fmtest w9 w9:t1 direct w9:p1' "$ROOT" 2>&1 )
+  status=$?
+  expect_code 0 "$status" "the prune stays best-effort and must not fail its caller when it declines"
+  assert_contains "$out" "holds w9:pX instead of the created w9:p1" \
+    "the prune did not name the exact created pane it expected"
+  assert_not_contains "$(cat "$log")" $'\x1f''pane'$'\x1f''close' \
+    "the prune closed a pane that is not the exact created seeded root pane"
+  pass "fm_backend_herdr_workspace_prune_seeded_default_tab: refuses a seeded tab whose sole pane is not the exact created root pane"
+}
+
+test_projection_prune_targets_the_exact_created_seeded_pane() {
+  # The projection path captures .result.root_pane.pane_id from its own
+  # workspace-create response, so it pins the prune to that exact pane rather
+  # than to whichever pane the seeded tab happens to list first.
+  local dir log resp fb status
+  dir="$TMP_ROOT/projection-exact-seeded-pane"; mkdir -p "$dir/responses"
+  log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}\n' > "$resp/1.out"
+  printf '{"result":{"tab":{"tab_id":"w9:t2"},"root_pane":{"pane_id":"w9:p2"}}}\n' > "$resp/2.out"
+  printf '{"result":{"tabs":[{"tab_id":"w9:t1","label":"1","workspace_id":"w9"},{"tab_id":"w9:t2","label":"fm-task-p2","workspace_id":"w9"}]}}\n' > "$resp/3.out"
+  # The plugin's split-then-swap lists its own pane first inside the seeded tab.
+  printf '{"result":{"panes":[{"pane_id":"w9:pF","tab_id":"w9:t1"},{"pane_id":"w9:p1","tab_id":"w9:t1"},{"pane_id":"w9:p2","tab_id":"w9:t2"}]}}\n' > "$resp/4.out"
+  printf '{"result":{"tabs":[{"tab_id":"w9:t1","label":"1","workspace_id":"w9"},{"tab_id":"w9:t2","label":"fm-task-p2","workspace_id":"w9"}]}}\n' > "$resp/5.out"
+  printf '{"result":{"panes":[{"pane_id":"w9:pF","tab_id":"w9:t1"},{"pane_id":"w9:p1","tab_id":"w9:t1"},{"pane_id":"w9:p2","tab_id":"w9:t2"}]}}\n' > "$resp/6.out"
+  fb=$(make_herdr_fakebin "$dir")
+  PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" HERDR_SESSION=fmtest \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_focus_snapshot() { printf "captain-ws\tcaptain-tab"; }; fm_backend_herdr_projection_focus_restore() { return 0; }; fm_backend_herdr_projection_create_task /tmp/proj label fm-task-p2' \
+    "$ROOT" >/dev/null 2>"$dir/err"
+  status=$?
+  [ "$status" -ne 0 ] || fail "a foreign pane inside the seeded tab must not report a converged one-task-pane projection"
+  assert_not_contains "$(cat "$log")" $'\x1f''pane'$'\x1f''close'$'\x1f''w9:pF' \
+    "the projected prune closed the foreign split pane (the exact 2026-08-22 wrong-pane defect)"
+  assert_not_contains "$(cat "$log")" $'\x1f''pane'$'\x1f''close'$'\x1f''w9:p1' \
+    "the projected prune closed the seeded pane while a foreign pane shared its tab"
+  assert_contains "$(cat "$dir/err")" "no longer holds exactly one pane" \
+    "the projected prune did not name why it left the seeded tab alone"
+  pass "herdr presentation create: the seeded prune never closes a foreign pane that split into the seeded tab"
+}
+
 # --- native event push: normalize / policy-routing / dedupe / wait ----------
 #
 # These exercise the herdr subscriber (fm_backend_herdr_wait_transition and its
@@ -4005,6 +4136,9 @@ test_repeated_cycles_reuse_one_workspace_no_orphans
 test_adopted_workspace_never_prunes_default_tab
 test_label_collision_startup_workspace_leaves_live_tab_alone
 test_prune_refuses_a_working_agent_pane_defense_in_depth
+test_prune_refuses_when_a_foreign_pane_shares_the_seeded_tab
+test_prune_refuses_a_seeded_tab_whose_sole_pane_is_not_the_created_one
+test_projection_prune_targets_the_exact_created_seeded_pane
 test_create_task_refuses_duplicate_label
 test_create_task_refuses_duplicate_label_when_agent_live
 test_create_task_refuses_when_any_duplicate_label_is_live

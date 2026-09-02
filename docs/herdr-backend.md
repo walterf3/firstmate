@@ -1,7 +1,7 @@
 # Herdr runtime backend
 
 Herdr is an experimental agent-native terminal backend with native per-pane agent state and push events.
-Firstmate requires Herdr protocol 14 or newer; broad backend verification covers versions 0.7.1, 0.7.3, 0.7.4, and 0.7.5, while presentation projection and pane-directory semantics are additionally verified on 0.8.0 protocol 19 and protocol-16 features remain gated by availability.
+Firstmate requires Herdr protocol 14 or newer; broad backend verification covers versions 0.7.1, 0.7.3, 0.7.4, and 0.7.5, while presentation projection, default-tab prune safety, and pane-directory semantics are additionally verified on 0.8.0 protocol 19 and protocol-16 features remain gated by availability.
 Herdr provides the terminal session while Treehouse continues to provide task worktrees.
 [`configuration.md`](configuration.md#runtime-backend-configbackend--fm_backend) owns shared backend selection and metadata semantics.
 
@@ -168,10 +168,15 @@ An adopted workspace never supplies that id and can never enter the prune path, 
 Immediately before close, Firstmate rechecks the exact tab, expected seed label, and native agent state.
 A working seed pane is never closed.
 
-This created-versus-adopted gate is a destructive safety boundary.
+The pane that close targets is equally exact.
+A Herdr tab is not permanently single-pane, so Firstmate closes the seeded tab's pane only while that tab still consists of exactly one pane, and the projected path additionally requires that pane to be the exact root pane its own create response returned.
+A seeded tab something else has split a second pane into is left entirely alone with a warning naming the workspace and session, because Firstmate never closes a pane it did not create.
+
+This created-versus-adopted gate is a destructive safety boundary, and so is that exact-pane rule.
 A prior label heuristic could adopt a captain-owned workspace named `firstmate` and close its live seed-shaped tab.
-The current structural gate removes label inference from cleanup authority.
-`tests/fm-backend-herdr-prune-safety-e2e.test.sh` reproduces the collision in an isolated named session and proves the adopted pane remains untouched.
+A later tab-membership lookup could still close whichever pane the seeded tab listed first, which is not the created pane once a Herdr plugin subscribed to `workspace.created` splits its own pane in and swaps it to the dock edge.
+The current structural gates remove both label inference and list-order inference from cleanup authority.
+`tests/fm-backend-herdr-prune-safety-e2e.test.sh` reproduces the label collision and the foreign-split shape in an isolated named session and proves the adopted pane and the foreign pane both remain untouched.
 
 ## Endpoint metadata
 
@@ -343,6 +348,12 @@ Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never 
 - Mutable labels can collide; they are never placement or destructive authority.
 - A Firstmate outside Herdr cannot resolve a launcher workspace, so a colliding home label refuses new spawns until the collision is cleared.
 - Ghost and placeholder recognition depends on ANSI de-emphasis and fails safely to pending when unavailable.
+- A Herdr plugin that opens its own pane from a `workspace.created` or `tab.created` hook races every projected spawn.
+  It splits into the workspace Firstmate is still assembling, so the projection cannot reach exactly one task pane and the spawn stops, and it later keeps an emptied home workspace alive so the next spawn adopts it instead of creating a fresh one.
+  Firstmate never closes such a pane, and the exactly-one-task-pane invariant is deliberately retained rather than widened to tolerate foreign panes.
+  Hooking that kind of plugin to `tab.focused` and `pane.focused` instead avoids the creation race only for a workspace that is not focused at creation.
+  That is the ordinary case, because Firstmate creates projected workspaces with `--no-focus` into a session that already has a focused workspace, which was measured to stay unfocused with no split.
+  The first workspace in an empty session is focused regardless of `--no-focus`, so a `pane.focused` hook still splits into it.
 - Mid-session secondmate liveness is not implemented.
 - OpenCode 1.18.4 can accept Enter while busy without clearing the composer.
   The tmux backend has a busy-queue fallback, but Herdr still reports this case as submit pending and needs a separate adapter fix.
