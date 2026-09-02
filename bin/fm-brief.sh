@@ -49,6 +49,10 @@
 # declared-external-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
 # "blocked:": pause for a known external wait expected to clear on its own,
 # blocked when firstmate must act.
+# Every scaffold's done:/failed:/needs-decision: lines also carry the worker's
+# reported RSM; the ask-user-authority skill owns the ladder that consumes it.
+# That sentence sits in unquoted heredocs, so its backticks must stay escaped or
+# bash substitutes the words away at scaffold time (tests/fm-brief.test.sh pins it).
 # Ship tasks include a project-memory section so durable project-intrinsic
 # learnings can be committed to AGENTS.md through the project's delivery path;
 # it carries the AGENTS.md authoring bar (widely useful knowledge only, pointers

@@ -77,9 +77,9 @@ Frame Clerk RSM measures frame readiness.
 Lean Six Sigma RSM telemetry measures receipt quality.
 Neither score proves that an action is correct, predicts success, or grants authority.
 
-Treat `0.80` as an uncalibrated signed prior for ask pressure until a separate reviewed calibration binds a behavioral threshold.
-When an epistemic Ask has provenance-bearing numeric evidence, report whether its post-evidence RSM is below that prior, but never make the threshold a universal authorization rule.
-A low RSM alone does not justify an Ask, and a high RSM never overrides a captain-only authority boundary.
+The captain-ratified escalation ladder above binds `0.80` as the rung threshold for load-bearing choices; it is a routing threshold, not a universal authorization rule.
+When an epistemic Ask has provenance-bearing numeric evidence, report whether its post-evidence RSM is below that threshold.
+A low RSM alone does not justify an Ask to the captain before the oracle and fresh-team rungs, and a high RSM never overrides a captain-only authority boundary.
 When the evidence, frame, CTQs, or weights change, recompute `NS_conf`, `NAV_conf`, and weighted-geometric RSM before using them.
 Use qualitative confidence rather than inventing numeric precision when the inputs have no defensible score provenance.
 
@@ -116,7 +116,7 @@ Do not relay reviewer labels, gate output, RSM, or advisory receipts as if they 
 
 ## Calibration period
 
-Do not enforce a fixed RSM threshold until behavioral evidence connects it to fewer avoidable asks without more reversals, crossed boundaries, rework, or decision delay.
+The ladder's `0.80` rung threshold stays under calibration: behavioral evidence must connect it to fewer avoidable asks without more reversals, crossed boundaries, rework, or decision delay, and only the captain re-ratifies a different value.
 At task closeout, record observable calibration facts in the existing private task report or decision artifact rather than creating a parallel ledger:
 
 - asks per autonomous task;
@@ -127,8 +127,7 @@ At task closeout, record observable calibration facts in the existing private ta
 - rework caused by delaying or suppressing an Ask;
 - repeated asks from the same causal theme.
 
-A separate reviewed calibration may later bind a numeric threshold.
-Until then, use these outcomes to improve classification and evidence selection, not to manufacture authority.
+Use these outcomes to improve classification, evidence selection, and any future re-ratification of the rung threshold, not to manufacture authority.
 
 ## Classification examples
 
