@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # tests/fm-backend-herdr-prune-safety-e2e.test.sh - isolated real-herdr
-# regression test for the 2026-07-02 self-kill incident and its fix
-# (bin/backends/herdr.sh's created-vs-adopted default-tab-prune gate; see
-# docs/herdr-backend.md "Default-tab prune" / the incident writeup there).
+# regression test for the 2026-07-02 self-kill incident and the 2026-08-22
+# wrong-pane incident and their fixes (bin/backends/herdr.sh's
+# created-vs-adopted default-tab-prune gate and its exact sole-pane resolver;
+# see docs/herdr-backend.md "Default-tab prune safety").
 #
 # Reproduces the exact collision shape against a private, throwaway
 # HERDR_SESSION (never the captain's default): a startup-workspace-shaped
@@ -13,8 +14,11 @@
 # create_task path and asserts the live pane (and its live process) survive
 # untouched. Also exercises the normal happy path (a genuinely fresh
 # workspace's seeded default tab gets pruned, leaving exactly one clean
-# fm-<id> task tab), mirroring tests/fm-backend-herdr-smoke.test.sh's broader
-# coverage but scoped tightly to this one safety property.
+# fm-<id> task tab), then reproduces the wrong-pane shape (a third party
+# split a second pane into the seeded default tab and it lists first) and
+# asserts neither pane is closed, mirroring
+# tests/fm-backend-herdr-smoke.test.sh's broader coverage but scoped tightly
+# to this one destructive-safety boundary.
 #
 # Safety (tests/herdr-test-safety.sh): cleanup uses ONLY
 # herdr_safe_stop_and_delete, never a bare/inline-prefixed `herdr server

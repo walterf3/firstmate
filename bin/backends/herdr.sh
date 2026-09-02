@@ -3066,9 +3066,13 @@ fm_backend_herdr_wait_for_working() {  # <session> <pane_id> <budget-seconds> <p
   fi
 }
 
-# fm_backend_herdr_pane_for_tab: the root pane id for <tab_id> in <workspace_id>
-# of <session>, via one pane list call filtered by tab_id (never assumes a
-# tab-number/pane-number correspondence - herdr numbers them independently).
+# fm_backend_herdr_pane_for_tab: the listed-FIRST pane id for <tab_id> in
+# <workspace_id> of <session>, via one pane list call filtered by tab_id (never
+# assumes a tab-number/pane-number correspondence - herdr numbers them
+# independently). This is "some pane in this tab", not necessarily its root
+# pane once something else has split into it, so it is for read-only
+# classification only; every close path resolves through
+# fm_backend_herdr_sole_pane_for_tab below.
 fm_backend_herdr_pane_for_tab() {  # <session> <workspace_id> <tab_id>
   local session=$1 wsid=$2 tab_id=$3 panes
   panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
