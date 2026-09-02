@@ -731,6 +731,36 @@ test_scout_and_secondmate_scaffold() {
   pass "fm-brief: scout and secondmate code paths still scaffold well-formed briefs"
 }
 
+# The RSM reporting sentence lives in unquoted heredocs, so its literal backticks
+# must be escaped: unescaped ones are command-substituted at scaffold time,
+# stripping the words from the brief and spraying "command not found" on stderr.
+test_rsm_reporting_renders_literally_in_all_brief_scaffolds() {
+  local home kind id brief err
+  home="$TMP_ROOT/rsm-home"
+  mkdir -p "$home/data"
+
+  for kind in ship scout secondmate; do
+    id="brief-rsm-$kind"
+    err="$home/$id.stderr"
+    case "$kind" in
+      ship) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode no-mistakes >/dev/null 2>"$err" ;;
+      scout) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>"$err" ;;
+      secondmate) FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" --secondmate --no-projects >/dev/null 2>"$err" ;;
+    esac
+    [ -s "$err" ] && fail "$kind brief scaffold wrote to stderr: $(cat "$err")"
+    brief="$home/data/$id/brief.md"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep 'Every `done:`, `failed:`, and `needs-decision:` line also carries your confidence' "$brief" \
+      "$kind brief did not render the RSM reporting requirement literally"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '`RSM=low (missing baseline)`' "$brief" \
+      "$kind brief did not render the qualitative RSM example literally"
+    assert_grep 'omitting it routes your gate to the top of the ladder by default' "$brief" \
+      "$kind brief did not state the omission default"
+  done
+  pass "fm-brief.sh: RSM reporting requirement renders literally in every scaffold"
+}
+
 test_script_parses
 test_no_heredoc_in_command_substitution
 test_help_includes_entire_header
@@ -750,5 +780,6 @@ test_secondmate_no_projects_charter
 test_secondmate_marked_request_reporting_contract
 test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
+test_rsm_reporting_renders_literally_in_all_brief_scaffolds
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
