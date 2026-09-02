@@ -16,8 +16,15 @@ The concise standing authority boundary remains always loaded in `AGENTS.md` sec
 ## Classify before escalating
 
 1. Check the project's configured authority first.
-   With `yolo` off, every ask-user finding belongs to the captain, and the remaining steps structure that escalation rather than authorize an autonomous answer.
+   With `yolo` off, the captain owns ask-user findings that survive the ladder below or hit a hard boundary; the remaining steps structure that escalation.
    With `yolo` on, firstmate owns routine decisions that remain inside the accepted contract, while stronger merge, destructive, irreversible, and security-sensitive boundaries remain unchanged.
+   Regardless of `yolo` posture, run the captain-ratified RSM escalation ladder (2026-09-02) before any captain contact:
+   - the worker's reported RSM (numeric when explicit scores, tools, or artifacts exist, otherwise qualitative) is the entry signal;
+   - a load-bearing choice resolved by firstmate's own evidence at RSM ≥ 0.80 is decided autonomously under standing authority, recorded with its RSM surface, and batched into the next natural captain report;
+   - RSM below 0.80, unmeasurable, or contested goes first to the oracle (multi-brain query corroborated against live sources), then to a fresh non-author team (cross-family when correlation matters);
+   - only what remains below 0.80 after both rungs, or hits a hard boundary (authority widening, destructive/irreversible/security-sensitive, red merge, required blueprint change, explicit halt), reaches the captain as one batched decision surface with per-option RSM.
+   A worker-gate ask-user finding carries no independent authority to jump the ladder; an ask paid to the captain that the ladder could have resolved is a protocol violation, not a preference.
+   With yolo off, the ladder still governs routing: a load-bearing choice at RSM >= 0.80 is resolved autonomously under the ratifying standing authority and reported in the next batched captain report - per-item asks are the protocol violation, not the decision; merge, destructive, and other hard boundaries remain captain-owned and unaffected.
 2. Classify the event before choosing an action.
    - `AUTHORITY`: A genuine contract expansion, credential need, or stronger boundary not already granted by current explicit or standing authority requires a prompt compact captain decision.
    - `EXTERNAL_WAIT`: A known condition expected to clear without a decision is recorded, monitored on a bounded schedule, and resurfaced only when its bound expires or a decision becomes necessary.
@@ -70,9 +77,9 @@ Frame Clerk RSM measures frame readiness.
 Lean Six Sigma RSM telemetry measures receipt quality.
 Neither score proves that an action is correct, predicts success, or grants authority.
 
-Treat `0.80` as an uncalibrated signed prior for ask pressure until a separate reviewed calibration binds a behavioral threshold.
-When an epistemic Ask has provenance-bearing numeric evidence, report whether its post-evidence RSM is below that prior, but never make the threshold a universal authorization rule.
-A low RSM alone does not justify an Ask, and a high RSM never overrides a captain-only authority boundary.
+The captain-ratified escalation ladder above binds `0.80` as the rung threshold for load-bearing choices; it is a routing threshold, not a universal authorization rule.
+When an epistemic Ask has provenance-bearing numeric evidence, report whether its post-evidence RSM is below that threshold.
+A low RSM alone does not justify an Ask to the captain before the oracle and fresh-team rungs, and a high RSM never overrides a captain-only authority boundary.
 When the evidence, frame, CTQs, or weights change, recompute `NS_conf`, `NAV_conf`, and weighted-geometric RSM before using them.
 Use qualitative confidence rather than inventing numeric precision when the inputs have no defensible score provenance.
 
@@ -109,7 +116,7 @@ Do not relay reviewer labels, gate output, RSM, or advisory receipts as if they 
 
 ## Calibration period
 
-Do not enforce a fixed RSM threshold until behavioral evidence connects it to fewer avoidable asks without more reversals, crossed boundaries, rework, or decision delay.
+The ladder's `0.80` rung threshold stays under calibration: behavioral evidence must connect it to fewer avoidable asks without more reversals, crossed boundaries, rework, or decision delay, and only the captain re-ratifies a different value.
 At task closeout, record observable calibration facts in the existing private task report or decision artifact rather than creating a parallel ledger:
 
 - asks per autonomous task;
@@ -120,8 +127,7 @@ At task closeout, record observable calibration facts in the existing private ta
 - rework caused by delaying or suppressing an Ask;
 - repeated asks from the same causal theme.
 
-A separate reviewed calibration may later bind a numeric threshold.
-Until then, use these outcomes to improve classification and evidence selection, not to manufacture authority.
+Use these outcomes to improve classification, evidence selection, and any future re-ratification of the rung threshold, not to manufacture authority.
 
 ## Classification examples
 

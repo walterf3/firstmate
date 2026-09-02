@@ -49,6 +49,10 @@
 # declared-external-wait verb (FM_CLASSIFY_PAUSED_VERB, default "paused") from
 # "blocked:": pause for a known external wait expected to clear on its own,
 # blocked when firstmate must act.
+# Every scaffold's done:/failed:/needs-decision: lines also carry the worker's
+# reported RSM; the ask-user-authority skill owns the ladder that consumes it.
+# That sentence sits in unquoted heredocs, so its backticks must stay escaped or
+# bash substitutes the words away at scaffold time (tests/fm-brief.test.sh pins it).
 # Ship tasks include a project-memory section so durable project-intrinsic
 # learnings can be committed to AGENTS.md through the project's delivery path;
 # it carries the AGENTS.md authoring bar (widely useful knowledge only, pointers
@@ -242,6 +246,10 @@ Report only true captain-relevant outcomes or a declared external wait by append
 States: working, needs-decision, blocked, $PAUSED_VERB, done, failed.
 Use \`$PAUSED_VERB: {why}\` (distinct from \`blocked:\`) only when your domain is deliberately idling on a known external wait you expect to clear on its own; use \`blocked:\` when you are stuck and need firstmate to act.
 Use this only for material phase changes, a captain decision, a real blocker, a failure, or work ready for review.
+Every \`done:\`, \`failed:\`, and \`needs-decision:\` line also carries your confidence in that outcome
+as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit scores, tools,
+or artifacts exist, qualitative otherwise (for example \`RSM≈0.85\` or \`RSM=low (missing baseline)\`);
+firstmate resolves escalation through your reported RSM, so omitting it is treated as unmeasurable RSM and climbs the full ladder from the oracle rung before any captain contact.
 This is also how you return the answer to a marked from-firstmate request above.
 A marked request requires one correlated answer after the work; it does not require a separate receipt or start acknowledgement.
 Never append \`working:\` merely to acknowledge receipt or announce that a marked request has started.
@@ -325,6 +333,11 @@ The report is the only thing that survives, so anything worth keeping must be in
    Each append wakes firstmate, so report sparingly: only phase changes a supervisor
    would act on and the needs-decision/blocked/paused/done/failed states. No step-by-step
    FYI progress lines; firstmate reads your pane for that.
+   Every \`done:\`, \`failed:\`, and \`needs-decision:\` line also carries your confidence in that
+   outcome as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit
+   scores, tools, or artifacts exist, qualitative otherwise (for example \`RSM≈0.85\` or
+   \`RSM=low (missing baseline)\`); firstmate resolves escalation through your reported RSM,
+   so omitting it is treated as unmeasurable RSM and climbs the full ladder from the oracle rung before any captain contact.
    Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
    known external wait you expect to clear on its own (an upstream release, a rate-limit reset):
    firstmate then leaves your idle pane alone and rechecks it on a long cadence instead of
@@ -442,6 +455,11 @@ $RULE1
    would act on (setup done, bug reproduced, fix implemented, validation passed) and the
    needs-decision/blocked/paused/done/failed states. No step-by-step FYI progress lines;
    firstmate reads your pane for that.
+   Every \`done:\`, \`failed:\`, and \`needs-decision:\` line also carries your confidence in that
+   outcome as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit
+   scores, tools, or artifacts exist, qualitative otherwise (for example \`RSM≈0.85\` or
+   \`RSM=low (missing baseline)\`); firstmate resolves escalation through your reported RSM,
+   so omitting it is treated as unmeasurable RSM and climbs the full ladder from the oracle rung before any captain contact.
    A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the
    turn after it; continue the same stage until a defined \`done:\` gate under Definition of done.
    Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
