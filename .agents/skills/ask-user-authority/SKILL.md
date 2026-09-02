@@ -18,6 +18,12 @@ The concise standing authority boundary remains always loaded in `AGENTS.md` sec
 1. Check the project's configured authority first.
    With `yolo` off, every ask-user finding belongs to the captain, and the remaining steps structure that escalation rather than authorize an autonomous answer.
    With `yolo` on, firstmate owns routine decisions that remain inside the accepted contract, while stronger merge, destructive, irreversible, and security-sensitive boundaries remain unchanged.
+   Regardless of `yolo` posture, run the captain-ratified RSM escalation ladder (2026-09-02) before any captain contact:
+   - the worker's reported RSM (numeric when explicit scores, tools, or artifacts exist, otherwise qualitative) is the entry signal;
+   - a load-bearing choice resolved by firstmate's own evidence at RSM ≥ 0.80 is decided autonomously under standing authority, recorded with its RSM surface, and batched into the next natural captain report;
+   - RSM below 0.80, unmeasurable, or contested goes first to the oracle (multi-brain query corroborated against live sources), then to a fresh non-author team (cross-family when correlation matters);
+   - only what remains below 0.80 after both rungs, or hits a hard boundary (authority widening, destructive/irreversible/security-sensitive, red merge, required blueprint change, explicit halt), reaches the captain as one batched decision surface with per-option RSM.
+   A worker-gate ask-user finding carries no independent authority to jump the ladder; an ask paid to the captain that the ladder could have resolved is a protocol violation, not a preference.
 2. Classify the event before choosing an action.
    - `AUTHORITY`: A genuine contract expansion, credential need, or stronger boundary not already granted by current explicit or standing authority requires a prompt compact captain decision.
    - `EXTERNAL_WAIT`: A known condition expected to clear without a decision is recorded, monitored on a bounded schedule, and resurfaced only when its bound expires or a decision becomes necessary.

@@ -242,6 +242,10 @@ Report only true captain-relevant outcomes or a declared external wait by append
 States: working, needs-decision, blocked, $PAUSED_VERB, done, failed.
 Use \`$PAUSED_VERB: {why}\` (distinct from \`blocked:\`) only when your domain is deliberately idling on a known external wait you expect to clear on its own; use \`blocked:\` when you are stuck and need firstmate to act.
 Use this only for material phase changes, a captain decision, a real blocker, a failure, or work ready for review.
+Every `done:`, `failed:`, and `needs-decision:` line also carries your confidence in that outcome
+as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit scores, tools,
+or artifacts exist, qualitative otherwise; firstmate resolves escalation through your reported RSM,
+so omitting it routes your gate to the top of the ladder by default.
 This is also how you return the answer to a marked from-firstmate request above.
 A marked request requires one correlated answer after the work; it does not require a separate receipt or start acknowledgement.
 Never append \`working:\` merely to acknowledge receipt or announce that a marked request has started.
@@ -442,6 +446,11 @@ $RULE1
    would act on (setup done, bug reproduced, fix implemented, validation passed) and the
    needs-decision/blocked/paused/done/failed states. No step-by-step FYI progress lines;
    firstmate reads your pane for that.
+   Every `done:`, `failed:`, and `needs-decision:` line also carries your confidence in that
+   outcome as RSM - numeric (weighted geometric mean of NS and NAV confidence) when explicit
+   scores, tools, or artifacts exist, qualitative otherwise (for example `RSM≈0.85` or
+   `RSM=low (missing baseline)`); firstmate resolves escalation through your reported RSM,
+   so omitting it routes your gate to the top of the ladder by default.
    A mid-task \`working:\` line (including setup complete) is nonterminal: do not end the
    turn after it; continue the same stage until a defined \`done:\` gate under Definition of done.
    Use \`$PAUSED_VERB: {why}\` - distinct from \`blocked:\` - ONLY when you are deliberately idling on a
