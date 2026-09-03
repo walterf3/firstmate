@@ -18,6 +18,8 @@ Its header owns the exact guard sequence, refusal classes, and receipt fields; t
 
 - Authority is explicit and named, never inferred: `--authority captain` records a current explicit captain instruction, and `--authority yolo` is accepted only when the task itself records `yolo=on`.
 - Uncommitted work in the task worktree is never landed, and a worktree that is not at the branch tip refuses.
+- A task lands exactly once: when the meta already records `landed=` or the receipt already exists, the landing refuses as `already-landed`, names the receipt and its landed SHA, and treats later commits on the task branch as follow-up work under a new task.
+- The receipt is never overwritten and the meta never gains a second `landed=` line; the `base-drift` and `not-fast-forward` refusals also name an existing receipt and its landed SHA so a rerun after a landing is always diagnosable.
 - The default branch must be a clean fast-forward ancestor of the branch, the clone must be clean and on its default branch, and the local default branch must match origin after a fresh fetch.
 - Revalidation before landing must be declared: `--check` reruns the project's local gate in the task worktree at the exact branch tip, and a non-zero exit refuses the landing; `--check none` is an explicit declaration that the project has no local gate.
 - A GitHub origin whose default branch carries classic branch protection or an active ruleset that a direct push would bypass or trip (pull request requirements, required status checks, deployments, signatures, creation or update restrictions, workflows, merge queue) is refused as a PR trigger, and an unreadable protection state refuses rather than guesses.

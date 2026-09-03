@@ -36,6 +36,11 @@
 #                     fm-merge-local.sh, PR modes with fm-pr-merge.sh)
 #   authority         --authority missing, or yolo while meta says yolo=off
 #   check-undeclared  --check missing (pass --check none to declare no gate)
+#   already-landed    meta already records landed= or data/<id>/landing-receipt
+#                     exists: a task lands exactly once, the existing receipt
+#                     and its landed SHA are named, and later commits on fm/<id>
+#                     are follow-up work under a new task (the receipt is never
+#                     overwritten and meta never gains a second landed= line)
 #   branch            fm/<id> does not exist, or the default branch is unknown
 #   clone-state       the project clone is not on its default branch or is dirty
 #   unlanded-work     the recorded task worktree has uncommitted changes or its
@@ -45,7 +50,9 @@
 #   remote-unreachable
 #                     fetching origin's default branch failed
 #   base-drift        the local default branch differs from origin's after the
-#                     fetch (refresh the clone or have the crewmate rebase)
+#                     fetch (refresh the clone or have the crewmate rebase);
+#                     names an existing receipt and its landed SHA when one exists,
+#                     as not-fast-forward does, so a post-landing rerun is diagnosable
 #   branch-protected  origin is a github.com repository whose classic branch
 #                     protection or active rulesets on the default branch would
 #                     be bypassed or rejected by a direct push - that repository
@@ -180,6 +187,22 @@ esac
 [ "$CHECK_SET" -eq 1 ] || refuse check-undeclared "revalidation-before-landing must be declared: --check '<command>' reruns the project's local gate at the branch tip, or --check none declares that no local gate exists"
 [ -n "$CHECK" ] || refuse check-undeclared "--check needs a command or the literal none"
 
+# --- already landed -----------------------------------------------------------
+RECEIPT="$DATA/$ID/landing-receipt"
+receipt_note() {
+  local sha
+  [ -f "$RECEIPT" ] || return 0
+  sha=$(grep '^landed_sha=' "$RECEIPT" | head -n 1 | cut -d= -f2- || true)
+  printf ' (existing receipt %s records landed_sha=%s)' "$RECEIPT" "${sha:-unknown}"
+}
+LANDED=$(meta_get landed)
+if [ -n "$LANDED" ] || [ -f "$RECEIPT" ]; then
+  landed_receipt=$(meta_get landed_receipt)
+  landed_sha=$LANDED
+  [ -n "$landed_sha" ] || [ ! -f "$RECEIPT" ] || landed_sha=$(grep '^landed_sha=' "$RECEIPT" | head -n 1 | cut -d= -f2- || true)
+  refuse already-landed "task $ID already landed ${landed_sha:-<unknown sha>} and its receipt is ${landed_receipt:-$RECEIPT}; a task lands exactly once, so later commits on fm/$ID are follow-up work under a new task"
+fi
+
 # --- branch and clone state ---------------------------------------------------
 [ -d "$PROJ" ] || refuse branch "project clone $PROJ does not exist"
 
@@ -226,7 +249,7 @@ fi
 
 # --- fast-forward -------------------------------------------------------------
 if ! git -C "$PROJ" merge-base --is-ancestor "$DEFAULT" "$BRANCH"; then
-  refuse not-fast-forward "$BRANCH is not a fast-forward of $DEFAULT (it has diverged); have the crewmate rebase $BRANCH onto $DEFAULT, then retry"
+  refuse not-fast-forward "$BRANCH is not a fast-forward of $DEFAULT (it has diverged); have the crewmate rebase $BRANCH onto $DEFAULT, then retry$(receipt_note)"
 fi
 
 # --- remote custody preflight -------------------------------------------------
@@ -238,9 +261,9 @@ git -C "$PROJ" fetch --quiet "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOT
   || refuse remote-unreachable "could not fetch $REMOTE $DEFAULT for $PROJ"
 BEFORE=$(git -C "$PROJ" rev-parse --verify "refs/remotes/$REMOTE/$DEFAULT")
 LOCAL_DEFAULT=$(git -C "$PROJ" rev-parse --verify "refs/heads/$DEFAULT")
-[ "$LOCAL_DEFAULT" = "$BEFORE" ] || refuse base-drift "local $DEFAULT ($LOCAL_DEFAULT) differs from $REMOTE/$DEFAULT ($BEFORE); refresh the clone through fleet sync and have the crewmate rebase onto the current $DEFAULT, then retry"
+[ "$LOCAL_DEFAULT" = "$BEFORE" ] || refuse base-drift "local $DEFAULT ($LOCAL_DEFAULT) differs from $REMOTE/$DEFAULT ($BEFORE); refresh the clone through fleet sync and have the crewmate rebase onto the current $DEFAULT, then retry$(receipt_note)"
 if [ "$TIP" = "$BEFORE" ]; then
-  refuse not-fast-forward "$BRANCH is already $REMOTE/$DEFAULT; there is nothing to land"
+  refuse not-fast-forward "$BRANCH is already $REMOTE/$DEFAULT; there is nothing to land$(receipt_note)"
 fi
 
 # Host of a configured remote URL: the authority of a scheme URL (userinfo and
@@ -384,7 +407,6 @@ fi
 git -C "$PROJ" fetch --quiet "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" >/dev/null 2>&1 || true
 
 # --- receipt: origin carries the landing, so custody is recorded now -----------
-RECEIPT="$DATA/$ID/landing-receipt"
 LANDED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 tmp=$(mktemp "$DATA/$ID/.landing-receipt.XXXXXX")
 cat > "$tmp" <<EOF
@@ -404,7 +426,8 @@ check=$CHECK
 check_exit=$CHECK_EXIT
 landed_at=$LANDED_AT
 EOF
-mv -f "$tmp" "$RECEIPT"
+[ ! -e "$RECEIPT" ] || { rm -f "$tmp"; refuse already-landed "receipt $RECEIPT appeared during the landing; the push of $TIP to $REMOTE/$DEFAULT already happened, so investigate before any retry"; }
+mv -n "$tmp" "$RECEIPT"
 printf 'landed=%s\nlanded_receipt=%s\n' "$TIP" "$RECEIPT" >> "$META"
 
 # --- local fast-forward: the clone catches up with what origin already holds --

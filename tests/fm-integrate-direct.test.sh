@@ -24,6 +24,8 @@
 #   (i) base-drift refusal: origin advanced past the local default branch
 #   (j) local-ff-failed: origin accepted the push but the clone could not
 #       fast-forward; the receipt and meta already record custody
+#   (k) already-landed refusal: a second landing of the same task refuses,
+#       names the receipt and SHA, and leaves the receipt and origin unchanged
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -392,6 +394,44 @@ test_local_ff_failure_keeps_custody() {
   pass "fm-integrate-direct keeps the custody receipt when origin landed but the clone could not fast-forward"
 }
 
+test_already_landed_refused() {
+  local case_dir rc tip receipt receipt_before
+  case_dir=$(make_case already-landed)
+  tip=$(branch_tip "$case_dir")
+  run_integrate "$case_dir" "$ID" --authority captain --check none \
+    || fail "already-landed: first landing failed: $(cat "$case_dir/stderr")"
+  receipt="$case_dir/data/$ID/landing-receipt"
+  receipt_before=$(cat "$receipt")
+  printf 'more\n' > "$case_dir/wt/more.txt"
+  git -C "$case_dir/wt" add more.txt
+  git -C "$case_dir/wt" commit -qm "follow-up commit"
+  set +e
+  run_integrate "$case_dir" "$ID" --authority captain --check none
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "already-landed: a second landing should refuse"
+  assert_grep 'REFUSED: already-landed:' "$case_dir/stderr" "already-landed: refusal did not name the class"
+  assert_grep "$receipt" "$case_dir/stderr" "already-landed: refusal did not name the receipt"
+  assert_grep "$tip" "$case_dir/stderr" "already-landed: refusal did not name the landed SHA"
+  assert_grep 'new task' "$case_dir/stderr" "already-landed: refusal did not route follow-up work to a new task"
+  [ "$(remote_head "$case_dir")" = "$tip" ] || fail "already-landed: remote main moved on the second run"
+  [ "$(local_main "$case_dir")" = "$tip" ] || fail "already-landed: local main moved on the second run"
+  [ "$(cat "$receipt")" = "$receipt_before" ] || fail "already-landed: the receipt was rewritten"
+  [ "$(grep -c '^landed=' "$case_dir/state/$ID.meta")" = 1 ] || fail "already-landed: meta gained a second landed= line"
+
+  case_dir=$(make_case already-landed-meta)
+  printf 'landed=%s\n' "$(branch_tip "$case_dir")" >> "$case_dir/state/$ID.meta"
+  set +e
+  run_integrate "$case_dir" "$ID" --authority captain --check none
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "already-landed-meta: meta landed= without a receipt should refuse"
+  assert_grep 'REFUSED: already-landed:' "$case_dir/stderr" "already-landed-meta: refusal did not name the class"
+  [ "$(remote_head "$case_dir")" = "$(git -C "$case_dir/project" rev-parse --verify "refs/heads/fm/$ID~1")" ] || fail "already-landed-meta: remote main moved"
+  assert_absent "$case_dir/data/$ID/landing-receipt" "already-landed-meta: a receipt was written"
+  pass "fm-integrate-direct lands a task exactly once and names the existing receipt on a rerun"
+}
+
 test_base_drift_refused() {
   local case_dir rc other
   case_dir=$(make_case base-drift)
@@ -422,4 +462,5 @@ test_other_modes_never_migrate
 test_check_must_be_declared
 test_push_rejected_leaves_local_untouched
 test_local_ff_failure_keeps_custody
+test_already_landed_refused
 test_base_drift_refused
