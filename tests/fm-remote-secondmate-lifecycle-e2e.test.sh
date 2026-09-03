@@ -344,6 +344,47 @@ wait "$provision_two" || fail "reconciled provisioning attempt failed"
 [ "$(grep -cF clone "$TMP_ROOT/provision-clones")" -eq 1 ] \
   || fail "reconciled provisioning cloned the already-published home"
 pass "overlapping remote home provisioning serializes through publication and rollback"
+
+# The remote host provisions every remote-backed mode itself and refuses a
+# local-only project on the host, independent of the parent's seed-side filter.
+git init -q --bare "$TMP_ROOT/beta.git"
+git -C "$PARENT/projects/alpha" push -q "file://$TMP_ROOT/beta.git" main
+DIRECT_FAKEBIN="$TMP_ROOT/direct-fake"
+mkdir -p "$DIRECT_FAKEBIN"
+cat > "$DIRECT_FAKEBIN/no-mistakes" <<SH
+#!/usr/bin/env bash
+touch "$TMP_ROOT/direct-no-mistakes.called"
+exit 0
+SH
+chmod +x "$DIRECT_FAKEBIN/no-mistakes"
+mode_manifest() { # <mode> <project> <origin>
+  printf 'schema=fm-remote-home-provision.v1\nid_b64=%s\ncharter_b64=%s\nproject_count=1\nproject=%s|%s|%s|%s\n' \
+    "$(printf direct | base64 | tr -d '\n')" \
+    "$(printf 'Direct integration provisioning charter.\n' | base64 | tr -d '\n')" \
+    "$(printf '%s' "$2" | base64 | tr -d '\n')" \
+    "$(printf '%s' "$3" | base64 | tr -d '\n')" \
+    "$(printf -- '- %s [%s] - %s project (added 2026-08-02)' "$2" "$1" "$2" | base64 | tr -d '\n')" \
+    "$(printf '%s' "$1" | base64 | tr -d '\n')"
+}
+mode_manifest direct-integration beta "file://$TMP_ROOT/beta.git" > "$TMP_ROOT/direct.manifest"
+PATH="$DIRECT_FAKEBIN:$PATH" FM_HOME="$TMP_ROOT/direct-home" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  "$REMOTE_ROOT/bin/fm-remote-home-provision.sh" < "$TMP_ROOT/direct.manifest" > "$TMP_ROOT/direct.out" 2>&1 \
+  || fail "remote provisioning refused a direct-integration project: $(cat "$TMP_ROOT/direct.out")"
+[ "$(cat "$TMP_ROOT/direct-home/.fm-secondmate-home")" = direct ] \
+  || fail "direct-integration provisioning did not publish the home marker"
+assert_present "$TMP_ROOT/direct-home/projects/beta/.git" "direct-integration provisioning did not clone the project origin"
+assert_grep '- beta [direct-integration] - beta project' "$TMP_ROOT/direct-home/data/projects.md" \
+  "direct-integration provisioning did not publish the project registry line"
+assert_absent "$TMP_ROOT/direct-no-mistakes.called" "direct-integration provisioning ran no-mistakes initialization"
+mode_manifest local-only gamma "file://$TMP_ROOT/beta.git" > "$TMP_ROOT/local-only.manifest"
+if PATH="$DIRECT_FAKEBIN:$PATH" FM_HOME="$TMP_ROOT/local-only-home" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  "$REMOTE_ROOT/bin/fm-remote-home-provision.sh" < "$TMP_ROOT/local-only.manifest" > "$TMP_ROOT/local-only.out" 2>&1; then
+  fail "remote provisioning accepted a local-only project"
+fi
+assert_grep 'project gamma is local-only and cannot be provisioned remotely' "$TMP_ROOT/local-only.out" \
+  "remote provisioning did not explain the local-only refusal"
+assert_absent "$TMP_ROOT/local-only-home" "remote provisioning kept a new home after refusing a local-only project"
+pass "remote provisioning accepts direct-integration projects and refuses local-only projects on the host"
 if [ "${FM_TEST_PROVISION_ONLY:-0}" = 1 ]; then
   echo "ALL TESTS PASSED"
   exit 0
