@@ -50,9 +50,7 @@
 #   remote-unreachable
 #                     fetching origin's default branch failed
 #   base-drift        the local default branch differs from origin's after the
-#                     fetch (refresh the clone or have the crewmate rebase);
-#                     names an existing receipt and its landed SHA when one exists,
-#                     as not-fast-forward does, so a post-landing rerun is diagnosable
+#                     fetch (refresh the clone or have the crewmate rebase)
 #   branch-protected  origin is a github.com repository whose classic branch
 #                     protection or active rulesets on the default branch would
 #                     be bypassed or rejected by a direct push - that repository
@@ -189,12 +187,6 @@ esac
 
 # --- already landed -----------------------------------------------------------
 RECEIPT="$DATA/$ID/landing-receipt"
-receipt_note() {
-  local sha
-  [ -f "$RECEIPT" ] || return 0
-  sha=$(grep '^landed_sha=' "$RECEIPT" | head -n 1 | cut -d= -f2- || true)
-  printf ' (existing receipt %s records landed_sha=%s)' "$RECEIPT" "${sha:-unknown}"
-}
 LANDED=$(meta_get landed)
 if [ -n "$LANDED" ] || [ -f "$RECEIPT" ]; then
   landed_receipt=$(meta_get landed_receipt)
@@ -249,7 +241,7 @@ fi
 
 # --- fast-forward -------------------------------------------------------------
 if ! git -C "$PROJ" merge-base --is-ancestor "$DEFAULT" "$BRANCH"; then
-  refuse not-fast-forward "$BRANCH is not a fast-forward of $DEFAULT (it has diverged); have the crewmate rebase $BRANCH onto $DEFAULT, then retry$(receipt_note)"
+  refuse not-fast-forward "$BRANCH is not a fast-forward of $DEFAULT (it has diverged); have the crewmate rebase $BRANCH onto $DEFAULT, then retry"
 fi
 
 # --- remote custody preflight -------------------------------------------------
@@ -261,9 +253,9 @@ git -C "$PROJ" fetch --quiet "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOT
   || refuse remote-unreachable "could not fetch $REMOTE $DEFAULT for $PROJ"
 BEFORE=$(git -C "$PROJ" rev-parse --verify "refs/remotes/$REMOTE/$DEFAULT")
 LOCAL_DEFAULT=$(git -C "$PROJ" rev-parse --verify "refs/heads/$DEFAULT")
-[ "$LOCAL_DEFAULT" = "$BEFORE" ] || refuse base-drift "local $DEFAULT ($LOCAL_DEFAULT) differs from $REMOTE/$DEFAULT ($BEFORE); refresh the clone through fleet sync and have the crewmate rebase onto the current $DEFAULT, then retry$(receipt_note)"
+[ "$LOCAL_DEFAULT" = "$BEFORE" ] || refuse base-drift "local $DEFAULT ($LOCAL_DEFAULT) differs from $REMOTE/$DEFAULT ($BEFORE); refresh the clone through fleet sync and have the crewmate rebase onto the current $DEFAULT, then retry"
 if [ "$TIP" = "$BEFORE" ]; then
-  refuse not-fast-forward "$BRANCH is already $REMOTE/$DEFAULT; there is nothing to land$(receipt_note)"
+  refuse not-fast-forward "$BRANCH is already $REMOTE/$DEFAULT; there is nothing to land"
 fi
 
 # Host of a configured remote URL: the authority of a scheme URL (userinfo and
@@ -426,8 +418,11 @@ check=$CHECK
 check_exit=$CHECK_EXIT
 landed_at=$LANDED_AT
 EOF
-[ ! -e "$RECEIPT" ] || { rm -f "$tmp"; refuse already-landed "receipt $RECEIPT appeared during the landing; the push of $TIP to $REMOTE/$DEFAULT already happened, so investigate before any retry"; }
-mv -n "$tmp" "$RECEIPT"
+if ! ln "$tmp" "$RECEIPT" 2>/dev/null; then
+  rm -f "$tmp"
+  refuse already-landed "receipt $RECEIPT appeared during the landing; the push of $TIP to $REMOTE/$DEFAULT already happened, so investigate before any retry"
+fi
+rm -f "$tmp"
 printf 'landed=%s\nlanded_receipt=%s\n' "$TIP" "$RECEIPT" >> "$META"
 
 # --- local fast-forward: the clone catches up with what origin already holds --
