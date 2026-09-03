@@ -46,38 +46,58 @@
 #                     fetching origin's default branch failed
 #   base-drift        the local default branch differs from origin's after the
 #                     fetch (refresh the clone or have the crewmate rebase)
-#   branch-protected  origin is a GitHub repository whose classic branch
+#   branch-protected  origin is a github.com repository whose classic branch
 #                     protection or active rulesets on the default branch would
 #                     be bypassed or rejected by a direct push - that repository
 #                     remains a PR trigger; use a PR-based mode
 #   protection-unknown
-#                     origin is on GitHub but its protection could not be read
-#                     (gh missing, unauthenticated, network); refuse, never guess
+#                     origin is on github.com but its protection could not be
+#                     read: gh missing or unauthenticated, network failure, an
+#                     owner/repo that cannot be parsed from the origin URL, a
+#                     plain "Not Found (HTTP 404)" (the repository is not visible
+#                     to the gh identity), or any 403 other than the GitHub Free
+#                     private-repository notice below; refuse, never guess
 #   red-check         the --check command exited non-zero
 #   push-rejected     origin refused the fast-forward push (nothing local changed)
 #   remote-mismatch   origin's head after the push is not the landed tip (the
 #                     push happened; investigate before any retry)
+#
+# Protection inspection keys off the host of the configured origin URL: every
+# github.com URL shape (https with or without userinfo, ssh:// with or without a
+# port, git://, and scp-style git@github.com:o/r or github.com:o/r) is inspected.
+# Only a classic-protection reply that says "Branch not protected" counts as no
+# classic protection; the rules endpoint must answer 200. A private repository
+# on GitHub Free answers the classic endpoint with the "Upgrade to GitHub Pro or
+# make this repository public to enable this feature" 403 because protection is
+# unavailable there: that exact notice lands and is recorded as
+# protection=unprotected-noted:github-free-private.
 #
 # Non-GitHub remotes (GitLab, self-hosted, file://) cannot have their protections
 # inspected here: the receipt records protection=uninspected:<host> and a
 # protected branch surfaces as push-rejected, which is still a loud refusal that
 # never works around the protection.
 #
-# Landing order keeps the clone consistent on every failure: the branch tip is
+# Landing order keeps custody consistent on every failure: the branch tip is
 # pushed to origin's default branch first (a plain, non-forced push that origin
 # accepts only as a fast-forward), the remote head is read back and must equal
-# the tip, and only then is the local default branch fast-forwarded to match.
+# the tip, the receipt and meta are written, and only then is the local default
+# branch fast-forwarded to match. If that local fast-forward fails (an index
+# lock, a hook, a concurrent write to the clone) the script exits 1 with
+# "local-ff-failed": origin already carries the landing, the receipt names it,
+# nothing local is forced, stashed, or reset, and the recovery is the guarded
+# fleet-sync refresh (bin/fm-fleet-sync.sh <project>).
 #
 # Receipt: data/<id>/landing-receipt, key=value lines written atomically after
-# the remote head verifies, survives teardown:
+# the remote head verifies and before the local fast-forward, survives teardown:
 #   task=<id>  project=<name>  mode=direct-integration  authority=<captain|yolo>
 #   branch=fm/<id>  default_branch=<name>  remote=origin  remote_url=<url>
 #   before_sha=<origin head before>  landed_sha=<fm/<id> tip>
 #   remote_sha=<origin head read back after the push>
-#   protection=<unprotected|uninspected:<host>>  check=<command|none>
-#   check_exit=<0|none>  landed_at=<UTC ISO 8601>
+#   protection=<unprotected|unprotected-noted:github-free-private|uninspected:<host>>
+#   check=<command|none>  check_exit=<0|none>  landed_at=<UTC ISO 8601>
 # The task meta gains landed=<sha> and landed_receipt=<path> so teardown and the
-# backlog can name the custody record.
+# backlog can name the custody record. The local fast-forward result is printed,
+# never appended to the receipt.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -223,32 +243,37 @@ if [ "$TIP" = "$BEFORE" ]; then
   refuse not-fast-forward "$BRANCH is already $REMOTE/$DEFAULT; there is nothing to land"
 fi
 
-# GitHub owner/repo from an origin URL; fails for any other host.
-github_owner_repo() {
-  local url=$1 rest
-  case "$url" in
-    https://github.com/*) rest=${url#https://github.com/} ;;
-    http://github.com/*) rest=${url#http://github.com/} ;;
-    ssh://git@github.com/*) rest=${url#ssh://git@github.com/} ;;
-    git@github.com:*) rest=${url#git@github.com:} ;;
-    *) return 1 ;;
-  esac
-  rest=${rest%/}
-  rest=${rest%.git}
-  case "$rest" in
-    */*/*|*/|/*|'') return 1 ;;
-  esac
-  [[ "$rest" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 1
-  printf '%s\n' "$rest"
-}
-
+# Host of a configured remote URL: the authority of a scheme URL (userinfo and
+# port stripped), the host of an scp-style [user@]host:path, or "local" for a
+# path or file URL.
 remote_host() {
   local url=$1 rest host=
   case "$url" in
-    *://*) rest=${url#*://}; rest=${rest#*@}; host=${rest%%[/:]*} ;;
-    *@*:*) rest=${url#*@}; host=${rest%%:*} ;;
+    *://*) rest=${url#*://}; rest=${rest%%/*}; rest=${rest#*@}; host=${rest%%:*} ;;
+    *:*)
+      rest=${url%%:*}
+      case "$rest" in
+        */*) ;;
+        *) host=${rest#*@} ;;
+      esac
+      ;;
   esac
-  printf '%s\n' "${host:-local}"
+  printf '%s\n' "${host:-local}" | tr '[:upper:]' '[:lower:]'
+}
+
+# owner/repo from the path of a github.com remote URL (after host and optional
+# port for scheme URLs, after the colon for scp-style URLs); fails when the
+# path is not exactly <owner>/<repo>[.git].
+github_owner_repo() {
+  local url=$1 rest
+  case "$url" in
+    *://*) rest=${url#*://}; rest=${rest#"${rest%%/*}"}; rest=${rest#/} ;;
+    *) rest=${url#*:} ;;
+  esac
+  rest=${rest%/}
+  rest=${rest%.git}
+  [[ "$rest" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 1
+  printf '%s\n' "$rest"
 }
 
 # Rule types that a plain fast-forward push neither bypasses nor trips.
@@ -259,10 +284,17 @@ ruleset_type_is_harmless() {
   esac
 }
 
-# Prints "unprotected" or "protected: <reason>"; returns 2 when GitHub could not
-# be read so the caller refuses rather than guessing.
+# The exact notice GitHub Free returns for a private repository, where branch
+# protection and rulesets are unavailable rather than merely unset.
+GITHUB_FREE_PRIVATE_NOTICE='Upgrade to GitHub Pro or make this repository public to enable this feature'
+
+# Prints "unprotected", "unprotected-noted:github-free-private", or
+# "protected: <reason>"; returns 2 when GitHub could not be read so the caller
+# refuses rather than guessing. A plain "Not Found (HTTP 404)" from either
+# endpoint means the repository is not visible to the gh identity, so it is
+# unreadable, not unprotected.
 github_protection_state() {
-  local repo=$1 branch=$2 out rc types t blocking=
+  local repo=$1 branch=$2 out rc types t blocking='' noted=''
   if ! command -v gh >/dev/null 2>&1; then
     echo "gh is not installed" >&2
     return 2
@@ -276,7 +308,8 @@ github_protection_state() {
     return 0
   fi
   case "$out" in
-    *'HTTP 404'*) ;;
+    *'Branch not protected'*) ;;
+    *"$GITHUB_FREE_PRIVATE_NOTICE"*) noted=1 ;;
     *) printf '%s\n' "$out" >&2; return 2 ;;
   esac
   set +e
@@ -285,7 +318,7 @@ github_protection_state() {
   set -e
   if [ "$rc" -ne 0 ]; then
     case "$out" in
-      *'HTTP 404'*) printf 'unprotected\n'; return 0 ;;
+      *"$GITHUB_FREE_PRIVATE_NOTICE"*) noted=1; out='[]' ;;
       *) printf '%s\n' "$out" >&2; return 2 ;;
     esac
   fi
@@ -295,24 +328,28 @@ github_protection_state() {
   done
   if [ -n "$blocking" ]; then
     printf 'protected: active rulesets on %s require %s\n' "$branch" "$blocking"
+  elif [ -n "$noted" ]; then
+    printf 'unprotected-noted:github-free-private\n'
   else
     printf 'unprotected\n'
   fi
 }
 
-if GH_REPO=$(github_owner_repo "$REMOTE_URL"); then
+REMOTE_HOST=$(remote_host "$REMOTE_URL")
+if [ "$REMOTE_HOST" = github.com ]; then
+  GH_REPO=$(github_owner_repo "$REMOTE_URL") || refuse protection-unknown "$REMOTE remote $REMOTE_URL is on github.com but its owner/repo could not be parsed, so its branch protection cannot be inspected; direct integration refuses rather than guesses"
   set +e
   PROTECTION=$(github_protection_state "$GH_REPO" "$DEFAULT")
   prc=$?
   set -e
-  [ "$prc" -eq 0 ] || refuse protection-unknown "could not read branch protection for $GH_REPO $DEFAULT; direct integration refuses rather than guesses (check gh auth status and network, or use a PR-based mode)"
+  [ "$prc" -eq 0 ] || refuse protection-unknown "could not read branch protection for $GH_REPO $DEFAULT; direct integration refuses rather than guesses (check gh auth status, repository visibility, and network, or use a PR-based mode)"
   case "$PROTECTION" in
-    unprotected) ;;
+    unprotected|unprotected-noted:github-free-private) ;;
     protected:*) refuse branch-protected "$GH_REPO $DEFAULT: ${PROTECTION#protected: }; this repository remains a PR trigger, so ship it through a PR-based mode instead of working around the protection" ;;
     *) refuse protection-unknown "unexpected protection state '$PROTECTION'" ;;
   esac
 else
-  PROTECTION="uninspected:$(remote_host "$REMOTE_URL")"
+  PROTECTION="uninspected:$REMOTE_HOST"
 fi
 
 # --- revalidation before landing ----------------------------------------------
@@ -345,9 +382,8 @@ if [ "$REMOTE_SHA" != "$TIP" ]; then
   refuse remote-mismatch "remote head after push is not the landed tip"
 fi
 git -C "$PROJ" fetch --quiet "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" >/dev/null 2>&1 || true
-git -C "$PROJ" merge --ff-only "$TIP" >/dev/null
 
-# --- receipt --------------------------------------------------------------------
+# --- receipt: origin carries the landing, so custody is recorded now -----------
 RECEIPT="$DATA/$ID/landing-receipt"
 LANDED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 tmp=$(mktemp "$DATA/$ID/.landing-receipt.XXXXXX")
@@ -370,4 +406,15 @@ landed_at=$LANDED_AT
 EOF
 mv -f "$tmp" "$RECEIPT"
 printf 'landed=%s\nlanded_receipt=%s\n' "$TIP" "$RECEIPT" >> "$META"
+
+# --- local fast-forward: the clone catches up with what origin already holds --
+set +e
+ff_out=$(git -C "$PROJ" merge --ff-only "$TIP" 2>&1)
+ff_rc=$?
+set -e
+if [ "$ff_rc" -ne 0 ]; then
+  printf '%s\n' "$ff_out" >&2
+  echo "error: local-ff-failed: the push landed $BRANCH ($TIP) on $REMOTE/$DEFAULT and the receipt $RECEIPT records it, but local $DEFAULT in $PROJ was not fast-forwarded (git merge --ff-only exited $ff_rc); nothing was forced, stashed, or reset - refresh the clone with the guarded fleet-sync (bin/fm-fleet-sync.sh $(basename "$PROJ"))" >&2
+  exit 1
+fi
 echo "landed $BRANCH on $REMOTE/$DEFAULT (${BEFORE:0:7} -> ${TIP:0:7}) and local $DEFAULT in $PROJ; receipt $RECEIPT"

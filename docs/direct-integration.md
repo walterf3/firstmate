@@ -21,15 +21,22 @@ Its header owns the exact guard sequence, refusal classes, and receipt fields; t
 - The default branch must be a clean fast-forward ancestor of the branch, the clone must be clean and on its default branch, and the local default branch must match origin after a fresh fetch.
 - Revalidation before landing must be declared: `--check` reruns the project's local gate in the task worktree at the exact branch tip, and a non-zero exit refuses the landing; `--check none` is an explicit declaration that the project has no local gate.
 - A GitHub origin whose default branch carries classic branch protection or an active ruleset that a direct push would bypass or trip (pull request requirements, required status checks, deployments, signatures, creation or update restrictions, workflows, merge queue) is refused as a PR trigger, and an unreadable protection state refuses rather than guesses.
-- The push is plain and never forced, so origin accepts it only as a fast-forward; the remote head is read back and must equal the landed tip before the local default branch is fast-forwarded and the receipt is written.
+- Every `github.com` origin URL shape is inspected, whether https with or without userinfo, ssh with or without a port, git, or scp-style; a `github.com` URL whose owner and repository cannot be parsed refuses as unreadable rather than falling back to uninspected.
+- A repository that is not visible to the `gh` identity answers with a plain not-found, and that is treated as unreadable, never as unprotected.
+- The push is plain and never forced, so origin accepts it only as a fast-forward; the remote head is read back and must equal the landed tip before the receipt is written, and only then is the local default branch fast-forwarded.
 
 The receipt at `data/<id>/landing-receipt` records the authority, branch, default branch, remote URL, the remote head before and after, the protection state, the check command and its exit, and the UTC landing time.
 The task meta gains `landed=` and `landed_receipt=`, and `bin/fm-teardown.sh` proves the landing through its ordinary content-in-default check before releasing the worktree.
+The receipt and the meta are written as soon as origin verifiably carries the landing, before the local default branch moves, so custody is never lost to a local failure.
 
 ## Limits
 
 Branch protection is inspected only for GitHub origins, through `gh api`.
 A GitLab, self-hosted, or file origin records `protection=uninspected:<host>` in the receipt, and a protected branch there surfaces as a push rejection, which is still a loud refusal that leaves every local ref untouched.
+A private repository on GitHub Free cannot carry branch protection or enforced rulesets, and GitHub answers the protection query with its exact "Upgrade to GitHub Pro or make this repository public to enable this feature" notice.
+That one notice lands and is recorded as `protection=unprotected-noted:github-free-private` in the receipt, so the receipt says why no protection was found; any other 403 stays unreadable and refuses.
+If origin accepts the push but the local default branch cannot be fast-forwarded afterwards (an index lock, a hook, a concurrent write to the clone), the script exits non-zero with `local-ff-failed`, names the receipt, and leaves every local ref where it was.
+Origin already carries the landing in that case, so the recovery is the guarded refresh through `bin/fm-fleet-sync.sh <project>`, never a force, stash, or reset.
 Nothing after the push is consulted: checks that run on the remote default branch after landing are outside this path, so a repository that relies on them for gating remains a PR trigger and should register a PR-based mode.
 Secondmate homes may hold `direct-integration` projects because the landing has remote custody, while `local-only` projects still stay in the main home.
 

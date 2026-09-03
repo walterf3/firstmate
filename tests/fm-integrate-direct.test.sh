@@ -8,15 +8,22 @@
 #
 # Matrix:
 #   (a) authority-required refusal: no --authority, and --authority yolo on yolo=off
-#   (b) unlanded-work refusal: uncommitted changes in the task worktree
+#   (b) unlanded-work refusal: uncommitted changes in the task worktree, and a
+#       task worktree whose HEAD is not the fm/<id> tip
 #   (c) branch-protection refusal: GitHub classic protection, blocking rulesets,
-#       and an unreadable protection state; harmless rulesets do not refuse
+#       and an unreadable protection state (an API error, a plain not-found, a
+#       403 other than the GitHub Free notice); harmless rulesets (deletion,
+#       non_fast_forward, required_linear_history) do not refuse; the exact
+#       GitHub Free private-repository notice lands with a noted protection
+#       value; every github.com URL shape is inspected
 #   (d) red-check refusal: the declared revalidation exits non-zero
 #   (e) successful guarded landing with receipt, under captain and under yolo
 #   (f) mode refusal: a local-only task never migrates onto this path
 #   (g) check-undeclared refusal: --check must be declared, none included
 #   (h) push-rejected refusal: an origin pre-receive hook rejects, nothing local moves
 #   (i) base-drift refusal: origin advanced past the local default branch
+#   (j) local-ff-failed: origin accepted the push but the clone could not
+#       fast-forward; the receipt and meta already record custody
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -29,9 +36,9 @@ ID=task-di1
 
 # Build one sandbox: bare origin, project clone on main, worktree on fm/<id> with
 # one feature commit, task meta, and a gh mock. Echoes the case dir.
-#   make_case <name> [yolo=off|on] [origin-url-shape=file|github]
+#   make_case <name> [yolo=off|on] [origin-url-shape=file|github] [github-url]
 make_case() {
-  local name=$1 yolo=${2:-off} shape=${3:-file} case_dir proj remote remote_abs wt
+  local name=$1 yolo=${2:-off} shape=${3:-file} url=${4:-https://github.com/example/repo} case_dir proj remote remote_abs wt
   case_dir="$TMP_ROOT/$name"
   proj="$case_dir/project"
   remote="$case_dir/remote.git"
@@ -47,8 +54,8 @@ make_case() {
   if [ "$shape" = github ]; then
     # The configured URL names GitHub so protection is inspected, while every
     # fetch and push is rewritten to the local bare origin.
-    git -C "$proj" remote add origin https://github.com/example/repo
-    git -C "$proj" config "url.file://$remote_abs.insteadOf" https://github.com/example/repo
+    git -C "$proj" remote add origin "$url"
+    git -C "$proj" config "url.file://$remote_abs.insteadOf" "$url"
   else
     git -C "$proj" remote add origin "file://$remote_abs"
   fi
@@ -72,13 +79,17 @@ case "${1:-} ${2:-}" in
     case "${FM_TEST_GH_MODE:-unprotected}" in
       protected) printf '{"required_pull_request_reviews":{"required_approving_review_count":1}}\n'; exit 0 ;;
       error) echo "gh: HTTP 401: Bad credentials" >&2; exit 1 ;;
+      not-found) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+      free-private) echo "gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)" >&2; exit 1 ;;
+      forbidden) echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2; exit 1 ;;
       *) echo "gh: Branch not protected (HTTP 404)" >&2; exit 1 ;;
     esac
     ;;
   "api repos/example/repo/rules/branches/main")
     case "${FM_TEST_GH_MODE:-unprotected}" in
       rules-pr) printf '[{"type": "deletion"},{"type": "pull_request","parameters":{}}]\n'; exit 0 ;;
-      rules-harmless) printf '[{"type":"deletion"},{"type":"non_fast_forward"}]\n'; exit 0 ;;
+      rules-harmless) printf '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"}]\n'; exit 0 ;;
+      not-found|forbidden) echo "gh mock: rules endpoint must not be consulted in mode $FM_TEST_GH_MODE" >&2; exit 1 ;;
       *) printf '[]\n'; exit 0 ;;
     esac
     ;;
@@ -88,6 +99,11 @@ exit 1
 SH
   chmod +x "$case_dir/fakebin/gh"
   printf '%s\n' "$case_dir"
+}
+
+# assert_line <exact-line> <file> <msg>: one whole line of <file> must equal it.
+assert_line() {
+  grep -Fx -- "$1" "$2" >/dev/null || fail "$3"
 }
 
 remote_head() { git --git-dir "$1/remote.git" rev-parse --verify refs/heads/main; }
@@ -153,7 +169,18 @@ test_unlanded_work_refused() {
   assert_grep 'scratch.txt' "$case_dir/stderr" "unlanded-work: refusal did not list the uncommitted file"
   assert_untouched "$case_dir" unlanded-work
   [ -f "$case_dir/wt/scratch.txt" ] || fail "unlanded-work: the uncommitted file was discarded"
-  pass "fm-integrate-direct refuses to land while the task worktree has uncommitted changes"
+
+  case_dir=$(make_case unlanded-head)
+  git -C "$case_dir/wt" checkout --quiet --detach HEAD~1
+  set +e
+  run_integrate "$case_dir" "$ID" --authority captain --check none
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "unlanded-head: a task worktree off the branch tip should refuse"
+  assert_grep 'REFUSED: unlanded-work:' "$case_dir/stderr" "unlanded-head: refusal did not name the class"
+  assert_grep "not the fm/$ID tip" "$case_dir/stderr" "unlanded-head: refusal did not state the tip mismatch"
+  assert_untouched "$case_dir" unlanded-head
+  pass "fm-integrate-direct refuses to land while the task worktree has uncommitted changes or is off the branch tip"
 }
 
 test_branch_protection_refused() {
@@ -171,20 +198,70 @@ test_branch_protection_refused() {
   done
   assert_grep 'pull_request' "$case_dir/stderr" "protection-rules-pr: refusal did not name the blocking rule type"
 
-  case_dir=$(make_case protection-error off github)
+  for mode in error not-found forbidden; do
+    case_dir=$(make_case "protection-$mode" off github)
+    set +e
+    FM_TEST_GH_MODE=$mode run_integrate "$case_dir" "$ID" --authority captain --check none
+    rc=$?
+    set -e
+    expect_code 1 "$rc" "protection-$mode: an unreadable protection state should refuse"
+    assert_grep 'REFUSED: protection-unknown:' "$case_dir/stderr" "protection-$mode: refusal did not name the class"
+    assert_untouched "$case_dir" "protection-$mode"
+  done
+
+  case_dir=$(make_case protection-unparsable off github https://github.com/example)
   set +e
-  FM_TEST_GH_MODE=error run_integrate "$case_dir" "$ID" --authority captain --check none
+  FM_TEST_GH_MODE=unprotected run_integrate "$case_dir" "$ID" --authority captain --check none
   rc=$?
   set -e
-  expect_code 1 "$rc" "protection-error: an unreadable protection state should refuse"
-  assert_grep 'REFUSED: protection-unknown:' "$case_dir/stderr" "protection-error: refusal did not name the class"
-  assert_untouched "$case_dir" protection-error
+  expect_code 1 "$rc" "protection-unparsable: a github.com URL without owner/repo should refuse"
+  assert_grep 'REFUSED: protection-unknown:' "$case_dir/stderr" "protection-unparsable: refusal did not name the class"
+  assert_untouched "$case_dir" protection-unparsable
 
   case_dir=$(make_case protection-harmless off github)
   FM_TEST_GH_MODE=rules-harmless run_integrate "$case_dir" "$ID" --authority captain --check none \
-    || fail "protection-harmless: harmless rulesets (deletion, non_fast_forward) should not refuse: $(cat "$case_dir/stderr")"
-  assert_grep 'protection=unprotected' "$case_dir/data/$ID/landing-receipt" "protection-harmless: receipt did not record unprotected"
+    || fail "protection-harmless: harmless rulesets (deletion, non_fast_forward, required_linear_history) should not refuse: $(cat "$case_dir/stderr")"
+  assert_line 'protection=unprotected' "$case_dir/data/$ID/landing-receipt" "protection-harmless: receipt did not record unprotected"
+
+  case_dir=$(make_case protection-free-private off github)
+  FM_TEST_GH_MODE=free-private run_integrate "$case_dir" "$ID" --authority captain --check none \
+    || fail "protection-free-private: the GitHub Free private-repository notice should land: $(cat "$case_dir/stderr")"
+  [ "$(remote_head "$case_dir")" = "$(branch_tip "$case_dir")" ] || fail "protection-free-private: remote main is not the branch tip"
+  assert_line 'protection=unprotected-noted:github-free-private' "$case_dir/data/$ID/landing-receipt" "protection-free-private: receipt did not record the noted protection value"
   pass "fm-integrate-direct refuses a protected or unreadable GitHub default branch and lands past harmless rulesets"
+}
+
+test_github_url_shapes_inspected() {
+  local case_dir rc url i=0
+  for url in \
+    'ssh://git@github.com:22/example/repo' \
+    'https://user@github.com/example/repo.git' \
+    'git://github.com/example/repo' \
+    'ssh://github.com/example/repo' \
+    'github.com:example/repo' \
+    'git@github.com:example/repo.git'; do
+    i=$((i + 1))
+    case_dir=$(make_case "url-shape-$i" off github "$url")
+    FM_TEST_GH_MODE=unprotected run_integrate "$case_dir" "$ID" --authority captain --check none \
+      || fail "url-shape $url: landing failed: $(cat "$case_dir/stderr")"
+    assert_line 'protection=unprotected' "$case_dir/data/$ID/landing-receipt" "url-shape $url: origin was not inspected as GitHub"
+    assert_line "remote_url=$url" "$case_dir/data/$ID/landing-receipt" "url-shape $url: receipt remote_url"
+  done
+
+  case_dir=$(make_case url-shape-protected off github 'ssh://git@github.com:22/example/repo')
+  set +e
+  FM_TEST_GH_MODE=rules-pr run_integrate "$case_dir" "$ID" --authority captain --check none
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "url-shape-protected: a blocking ruleset behind a port-qualified ssh URL should refuse"
+  assert_grep 'REFUSED: branch-protected:' "$case_dir/stderr" "url-shape-protected: refusal did not name the class"
+  assert_untouched "$case_dir" url-shape-protected
+
+  case_dir=$(make_case url-shape-other off github 'ssh://git@gitlab.example.com:22/example/repo')
+  run_integrate "$case_dir" "$ID" --authority captain --check none \
+    || fail "url-shape-other: a non-GitHub origin should land uninspected: $(cat "$case_dir/stderr")"
+  assert_line 'protection=uninspected:gitlab.example.com' "$case_dir/data/$ID/landing-receipt" "url-shape-other: receipt did not record the uninspected host"
+  pass "fm-integrate-direct inspects every github.com origin URL shape and records other hosts as uninspected"
 }
 
 test_red_check_refused() {
@@ -290,6 +367,31 @@ test_push_rejected_leaves_local_untouched() {
   pass "fm-integrate-direct surfaces an origin rejection loudly and moves nothing locally"
 }
 
+test_local_ff_failure_keeps_custody() {
+  local case_dir rc tip initial receipt
+  case_dir=$(make_case local-ff-failed)
+  tip=$(branch_tip "$case_dir")
+  initial=$(git -C "$case_dir/project" rev-parse --verify "refs/heads/fm/$ID~1")
+  : > "$case_dir/project/.git/index.lock"
+  set +e
+  run_integrate "$case_dir" "$ID" --authority captain --check none
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "local-ff-failed: a failed local fast-forward should exit non-zero"
+  [ "$(remote_head "$case_dir")" = "$tip" ] || fail "local-ff-failed: remote main should carry the landing"
+  [ "$(local_main "$case_dir")" = "$initial" ] || fail "local-ff-failed: local main moved despite the failure"
+  receipt="$case_dir/data/$ID/landing-receipt"
+  assert_present "$receipt" "local-ff-failed: the receipt was not written before the local fast-forward"
+  assert_grep "landed_sha=$tip" "$receipt" "local-ff-failed: receipt landed_sha"
+  assert_grep "remote_sha=$tip" "$receipt" "local-ff-failed: receipt remote_sha"
+  assert_grep "landed=$tip" "$case_dir/state/$ID.meta" "local-ff-failed: meta landed="
+  assert_grep 'local-ff-failed' "$case_dir/stderr" "local-ff-failed: the outcome was not named"
+  assert_grep "$receipt" "$case_dir/stderr" "local-ff-failed: the message did not name the receipt"
+  assert_grep 'fm-fleet-sync.sh' "$case_dir/stderr" "local-ff-failed: the message did not point at the fleet-sync recovery"
+  [ -f "$case_dir/project/.git/index.lock" ] || fail "local-ff-failed: the index lock was removed"
+  pass "fm-integrate-direct keeps the custody receipt when origin landed but the clone could not fast-forward"
+}
+
 test_base_drift_refused() {
   local case_dir rc other
   case_dir=$(make_case base-drift)
@@ -313,9 +415,11 @@ test_base_drift_refused() {
 test_authority_required
 test_unlanded_work_refused
 test_branch_protection_refused
+test_github_url_shapes_inspected
 test_red_check_refused
 test_successful_landing_with_receipt
 test_other_modes_never_migrate
 test_check_must_be_declared
 test_push_rejected_leaves_local_untouched
+test_local_ff_failure_keeps_custody
 test_base_drift_refused
