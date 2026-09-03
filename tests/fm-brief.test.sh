@@ -410,6 +410,9 @@ test_ship_and_scout_briefs_point_at_reasoning_scaffold() {
     brief="$home/data/$id/brief.md"
     assert_grep "$ROOT/.agents/skills/worker-reasoning-scaffold/SKILL.md" "$brief" \
       "$mode ship brief omitted the reasoning-scaffold owner"
+    if [ "$(grep -c "worker-reasoning-scaffold/SKILL.md" "$brief")" -ne 1 ]; then
+      fail "$mode ship brief must reference the reasoning-scaffold owner exactly once"
+    fi
     assert_grep "non-authoritative scaffold" "$brief" \
       "$mode ship brief dropped the scaffold's authority ceiling"
     assert_grep "never overrides this brief, the project's own contracts, or the selected delivery path" "$brief" \
@@ -424,6 +427,9 @@ test_ship_and_scout_briefs_point_at_reasoning_scaffold() {
   brief="$home/data/brief-scaffold-scout/brief.md"
   assert_grep "$ROOT/.agents/skills/worker-reasoning-scaffold/SKILL.md" "$brief" \
     "scout brief omitted the reasoning-scaffold owner"
+  if [ "$(grep -c "worker-reasoning-scaffold/SKILL.md" "$brief")" -ne 1 ]; then
+    fail "scout brief must reference the reasoning-scaffold owner exactly once"
+  fi
   assert_grep "non-authoritative scaffold" "$brief" \
     "scout brief dropped the scaffold's authority ceiling"
   if grep -q "CORE PRIMITIVES" "$brief"; then

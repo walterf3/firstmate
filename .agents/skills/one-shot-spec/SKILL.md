@@ -61,11 +61,12 @@ This skill grants no new approval power and weakens no destructive, irreversible
 
 ## AB2-mounted review
 
-The reference's core principles and notes forbid external convergers and automated spec scorers, and that clause stays in force exactly as written.
-When the target repository itself names AB2 as its spec-lane execution layer, for example through an `ab2-ops` skill or an AB2 pointer in its own `AGENTS.md`, the AB2 ten-step spec review workflow that repository already owns may stand in for the converger stage, because it is that repository's own review discipline rather than an external converger bolted onto the protocol.
+The reference's core principles and notes forbid external convergers and automated spec scorers, and that principle stays in force exactly as written.
+When the target repository itself names AB2, for example through an `ab2-ops` skill or an AB2 pointer in its own `AGENTS.md`, that repository's own AB2 ten-step spec review workflow may serve as the repository's own review pass.
+The receipts from that review pass are advisory evidence: they feed the reference's `AB2 Evidence Pass` (Stage 0.5) and the protocol's own iteration ledger, hypothesis register, and claim hygiene table.
+That review pass is not a substitute for any protocol stage, including Stage 0.5, the CRSM gate, Red-Team, or Precision Sniping, and it never replaces the internal RSM and CRSM scoring or decides readiness.
 The AB2 workflow is owned where the repository declares it and is never restated here.
-Its receipts are advisory evidence: they feed the protocol's own iteration ledger, hypothesis register, and claim hygiene table on the terms the reference's `AB2 Evidence Pass` section already sets, and they never replace the internal RSM and CRSM scoring or decide readiness on their own.
-A repository that does not name AB2 gets no converger substitution, and the reference bytes are untouched either way.
+A repository that does not name AB2 gets no such review pass, and the reference bytes are untouched either way.
 
 ## Stop and report
 
