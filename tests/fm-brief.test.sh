@@ -199,7 +199,7 @@ test_ship_modes_generate_clean_briefs() {
   home="$TMP_ROOT/ship-home"
   write_registry "$home"
 
-  for id_mode in "brief-nomistakes-a1:no-mistakes" "brief-directpr-a2:direct-PR" "brief-localonly-a3:local-only"; do
+  for id_mode in "brief-nomistakes-a1:no-mistakes" "brief-directpr-a2:direct-PR" "brief-directint-a2b:direct-integration" "brief-localonly-a3:local-only"; do
     id=${id_mode%%:*}
     mode=${id_mode##*:}
     FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1; status=$?
@@ -214,7 +214,7 @@ test_ship_modes_generate_clean_briefs() {
       "$id: brief missing nonterminal working:/setup-complete gate protection"
     assert_no_grep "EOF" "$brief" "$id: brief leaked a heredoc EOF marker (unterminated heredoc)"
   done
-  pass "fm-brief.sh: no-mistakes/direct-PR/local-only briefs generate cleanly"
+  pass "fm-brief.sh: no-mistakes/direct-PR/direct-integration/local-only briefs generate cleanly"
 }
 
 # A ship task's delivery mode is firstmate's per-task decision, so a missing or
@@ -238,7 +238,7 @@ test_ship_mode_is_required_and_closed_set() {
   done <<'ROWS'
 missing --mode||ship briefs require --mode
 empty --mode value|--mode|requires a value
-unknown mode value|--mode nope|must be one of no-mistakes, direct-PR, local-only
+unknown mode value|--mode nope|must be one of no-mistakes, direct-PR, direct-integration, local-only
 conditional policy is not a task mode|--mode no-mistakes-prod-only|classify this task's surface
 ROWS
   pass "fm-brief.sh: ship --mode is required and closed-set validated"
@@ -312,6 +312,17 @@ test_faster_paths_use_configured_authority_without_stacked_review() {
     "local-only brief retained a personal review stacked on the selected delivery path"
   assert_no_grep "make \`--intent\` preserve all relevant content from this brief" "$home/data/$id/brief.md" \
     "local-only brief must not include the no-mistakes --intent contract"
+  id="brief-direct-integration-authority-a4"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" direct-proj --mode direct-integration >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_grep "The configured merge authority approves the ready branch, then firstmate pushes the fast-forward to the remote default branch through the guarded direct-integration path and records a custody receipt." "$brief" \
+    "direct-integration brief lost configured merge authority and guarded landing"
+  assert_grep "Do NOT push, do NOT open a PR, do NOT merge." "$brief" \
+    "direct-integration brief must keep the worker off the remote"
+  assert_grep "a failure refuses the landing" "$brief" \
+    "direct-integration brief must tell the worker the landing reruns local checks"
+  assert_no_grep "make \`--intent\` preserve all relevant content from this brief" "$brief" \
+    "direct-integration brief must not include the no-mistakes --intent contract"
   id="brief-direct-intent-a4"
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" direct-proj --mode direct-PR >/dev/null 2>&1
   assert_no_grep "make \`--intent\` preserve all relevant content from this brief" "$home/data/$id/brief.md" \
@@ -379,7 +390,7 @@ test_ship_briefs_load_progressive_assurance_owner() {
   home="$TMP_ROOT/progressive-assurance-home"
   mkdir -p "$home/data"
 
-  for mode in no-mistakes direct-PR local-only; do
+  for mode in no-mistakes direct-PR direct-integration local-only; do
     id="brief-progressive-$mode"
     FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
       "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1
@@ -403,7 +414,7 @@ test_ship_and_scout_briefs_point_at_reasoning_scaffold() {
   home="$TMP_ROOT/reasoning-scaffold-home"
   mkdir -p "$home/data"
 
-  for mode in no-mistakes direct-PR local-only; do
+  for mode in no-mistakes direct-PR direct-integration local-only; do
     id="brief-scaffold-$mode"
     FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
       "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1

@@ -213,7 +213,13 @@ EOF
   MODE=$(cat "$TMP/mode")
   safe_id "$NAME" || die "project name is unsafe: $NAME"
   [ -n "$ORIGIN" ] || die "project $NAME has no origin"
-  case "$MODE" in no-mistakes|direct-PR) ;; *) die "project $NAME has unsupported remote mode: $MODE" ;; esac
+  # Every remote-backed mode provisions here; local-only lands only in the
+  # parent's own checkout, so it has no remote custody to seed on this host.
+  case "$MODE" in
+    no-mistakes|direct-PR|direct-integration) ;;
+    local-only) die "project $NAME is local-only and cannot be provisioned remotely" ;;
+    *) die "project $NAME has unsupported remote mode: $MODE" ;;
+  esac
   case "$REGISTRY_LINE" in "- $NAME "*) ;; *) die "project $NAME registry line is malformed" ;; esac
   DEST="$FM_HOME/projects/$NAME"
   if [ -e "$DEST" ] || [ -L "$DEST" ]; then

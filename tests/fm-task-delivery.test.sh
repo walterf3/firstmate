@@ -81,7 +81,7 @@ EOF
 missing both flags||ship spawns require --mode
 missing --yolo|--mode no-mistakes|ship spawns require --yolo
 missing --mode|--yolo off|ship spawns require --mode
-unknown mode|--mode nope --yolo off|must be one of no-mistakes, direct-PR, local-only
+unknown mode|--mode nope --yolo off|must be one of no-mistakes, direct-PR, direct-integration, local-only
 unknown yolo|--mode no-mistakes --yolo maybe|--yolo must be on or off
 conditional policy as a task mode|--mode no-mistakes-prod-only --yolo off|classify this task's surface
 ROWS
@@ -175,6 +175,8 @@ EOF
   done <<'ROWS'
 no-mistakes project shipped direct-PR|- proj [no-mistakes] - fixture (added 2026-01-01)|direct-PR|notice|no-mistakes
 no-mistakes project shipped local-only|- proj [no-mistakes] - fixture (added 2026-01-01)|local-only|notice|no-mistakes
+direct-PR project shipped direct-integration|- proj [direct-PR] - fixture (added 2026-01-01)|direct-integration|notice|direct-PR
+direct-integration project shipped direct-PR|- proj [direct-integration] - fixture (added 2026-01-01)|direct-PR|quiet|direct-integration
 no-mistakes project shipped no-mistakes|- proj [no-mistakes] - fixture (added 2026-01-01)|no-mistakes|quiet|no-mistakes
 local-only project shipped no-mistakes|- proj [local-only] - fixture (added 2026-01-01)|no-mistakes|quiet|local-only
 conditional policy shipped direct-PR|- proj [no-mistakes-prod-only] - fixture (added 2026-01-01)|direct-PR|quiet|no-mistakes-prod-only
@@ -249,6 +251,7 @@ test_project_mode_maps_the_conditional_policy() {
 - prodproj [no-mistakes-prod-only] - fixture (added 2026-01-01)
 - yoloproj [no-mistakes-prod-only +yolo] - fixture (added 2026-01-01)
 - flatproj [direct-PR] - fixture (added 2026-01-01)
+- diproj [direct-integration +yolo] - fixture (added 2026-01-01)
 - typoproj [no-mistakez] - fixture (added 2026-01-01)
 EOF
   out=$(FM_HOME="$home" "$PROJECT_MODE" prodproj 2>/dev/null)
@@ -264,6 +267,11 @@ EOF
 
   out=$(FM_HOME="$home" "$PROJECT_MODE" --raw flatproj 2>/dev/null)
   [ "$out" = "direct-PR off" ] || fail "--raw altered a flat registered mode (got '$out')"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" diproj 2>/dev/null)
+  [ "$out" = "direct-integration on" ] || fail "a registered direct-integration posture was not parsed as a flat mode (got '$out')"
+  err=$(FM_HOME="$home" "$PROJECT_MODE" diproj 2>&1 >/dev/null)
+  [ -z "$err" ] || fail "a registered direct-integration posture warned as unknown: $err"
 
   out=$(FM_HOME="$home" "$PROJECT_MODE" typoproj 2>/dev/null)
   [ "$out" = "no-mistakes off" ] || fail "a typo'd mode no longer falls back to the most rigorous default"

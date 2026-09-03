@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Tear down a finished task: return the treehouse worktree, release the Orca
 # worktree, or retire a secondmate home; kill the recorded runtime endpoint,
-# clear volatile state, refresh/prune the project's clone for PR-based ship
-# tasks, then print a backlog-refresh reminder for ship and scout teardowns
-# (a secondmate teardown prints none, since secondmates are not backlog items).
+# clear volatile state, refresh/prune the project's clone for remote-backed ship
+# tasks (every ship mode except local-only), then print a backlog-refresh
+# reminder for ship and scout teardowns (a secondmate teardown prints none,
+# since secondmates are not backlog items).
 # REFUSES if the worktree holds work that has not LANDED, because cleanup
 # hard-resets/removes the worktree and kills its processes. Work has landed when it is
 # reachable from any remote-tracking branch (a fork counts as a remote, so
@@ -25,6 +26,8 @@
 # local-only projects additionally accept work merged into the local default
 # branch (firstmate performs that merge after configured approval) as a fallback
 # for the common case where there is no remote at all.
+# direct-integration work lands on origin's default branch through
+# bin/fm-integrate-direct.sh, so the ordinary content-in-default check proves it.
 # Scout tasks (kind=scout in meta) carve out of that check: their worktree is
 # declared scratch and the report at data/<task-id>/report.md is the work
 # product. Teardown proceeds only once the report exists and the shared
@@ -839,6 +842,8 @@ backlog_refresh_reminder() {
       *)
         if [ "$MODE" = local-only ]; then
           done_cmd="tasks-axi done $ID --note \"local main\""
+        elif [ "$MODE" = direct-integration ]; then
+          done_cmd="tasks-axi done $ID --note \"direct integration; receipt data/$ID/landing-receipt\""
         else
           pr=$PR_URL
           if [ -n "$pr" ]; then
@@ -1129,7 +1134,11 @@ validate_worktree_teardown_safety() {
     if ! work_is_landed "$branch"; then
       echo "REFUSED: worktree $WT has work not on any remote and not landed." >&2
       printf 'unpushed commits:\n%s\n' "$unpushed" >&2
-      echo "Push the branch, land its PR, or get the captain's explicit OK to discard, then --force." >&2
+      if [ "$MODE" = direct-integration ]; then
+        echo "Land it with bin/fm-integrate-direct.sh after the configured authority approves, or get the captain's explicit OK to discard, then --force." >&2
+      else
+        echo "Push the branch, land its PR, or get the captain's explicit OK to discard, then --force." >&2
+      fi
       return 1
     fi
   fi
