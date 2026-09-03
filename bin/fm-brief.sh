@@ -61,6 +61,10 @@
 # Ship tasks also carry the Firstmate-wide progressive-assurance skill pointer;
 # that skill owns engineering and verification sequencing alongside the project's
 # own contracts and the task's selected delivery path.
+# Ship and scout briefs also carry one unconditional pointer to the
+# worker-reasoning-scaffold skill, a non-authoritative (prompt_scaffold_only)
+# reasoning self-check; the skill's own applicability note decides its weight per
+# harness, so the scaffold never branches per harness here.
 # Refuses to overwrite an existing brief.
 set -eu
 
@@ -308,6 +312,11 @@ EOF
 HERDR_SECTION=${HERDR_SECTION%$'\n'}
 fi
 
+# One unconditional reasoning-scaffold pointer shared by ship and scout briefs.
+# The skill owns the content and its per-harness applicability; the brief carries
+# only this reference (firstmate-coding-guidelines one-owner rule).
+REASONING_SCAFFOLD_LINE="Reasoning self-check: read \`$FM_ROOT/.agents/skills/worker-reasoning-scaffold/SKILL.md\` and let its applicability note decide its weight for your harness; it is a non-authoritative scaffold that never overrides this brief, the project's own contracts, or the selected delivery path."
+
 if [ "$KIND" = scout ]; then
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
@@ -316,6 +325,9 @@ You are a crewmate: an autonomous worker agent managed by firstmate. Work on you
 {TASK}
 
 $HERDR_SECTION
+
+# Reasoning method
+$REASONING_SCAFFOLD_LINE
 
 # Setup
 You are in a disposable git worktree of $REPO, at a detached HEAD on a clean default branch.
@@ -434,6 +446,7 @@ $HERDR_SECTION
 # Engineering and verification method
 Before mutable implementation or verification, read and follow \`$FM_ROOT/.agents/skills/progressive-assurance-engineering/SKILL.md\`.
 That skill owns the Firstmate-wide default sequence; apply it alongside the project's more specific contracts and this task's selected delivery path.
+$REASONING_SCAFFOLD_LINE
 
 # Setup
 You are in a disposable git worktree of $REPO, at a detached HEAD on a clean default branch.

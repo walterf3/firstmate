@@ -201,6 +201,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/worker-reasoning-scaffold/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": "AGENTS.md",
       "audience": "agent-runtime"
     },
