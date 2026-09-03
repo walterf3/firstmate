@@ -59,6 +59,14 @@ A `target_reached` stop, a passing hard-gate set, or a high readiness score mean
 Firstmate's project resolution, ship and scout classification, delivery mode, yolo posture, captain approval, and no-mistakes path continue to decide whether anything is built and how it ships.
 This skill grants no new approval power and weakens no destructive, irreversible, or security-sensitive boundary.
 
+## AB2-mounted review
+
+The reference's core principles and notes forbid external convergers and automated spec scorers, and that clause stays in force exactly as written.
+When the target repository itself names AB2 as its spec-lane execution layer, for example through an `ab2-ops` skill or an AB2 pointer in its own `AGENTS.md`, the AB2 ten-step spec review workflow that repository already owns may stand in for the converger stage, because it is that repository's own review discipline rather than an external converger bolted onto the protocol.
+The AB2 workflow is owned where the repository declares it and is never restated here.
+Its receipts are advisory evidence: they feed the protocol's own iteration ledger, hypothesis register, and claim hygiene table on the terms the reference's `AB2 Evidence Pass` section already sets, and they never replace the internal RSM and CRSM scoring or decide readiness on their own.
+A repository that does not name AB2 gets no converger substitution, and the reference bytes are untouched either way.
+
 ## Stop and report
 
 Stop and report rather than proceeding when any of these holds:

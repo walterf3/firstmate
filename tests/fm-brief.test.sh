@@ -394,6 +394,51 @@ test_ship_briefs_load_progressive_assurance_owner() {
   pass "fm-brief.sh: every ship mode loads the progressive-assurance owner"
 }
 
+# Ship and scout briefs carry one unconditional reference to the non-authoritative
+# worker-reasoning-scaffold skill. The skill owns the scaffold and its per-harness
+# applicability, so the brief must reference it without copying it or branching
+# per harness, and a secondmate charter (not a task brief) must stay clear of it.
+test_ship_and_scout_briefs_point_at_reasoning_scaffold() {
+  local home id mode brief charter
+  home="$TMP_ROOT/reasoning-scaffold-home"
+  mkdir -p "$home/data"
+
+  for mode in no-mistakes direct-PR local-only; do
+    id="brief-scaffold-$mode"
+    FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+      "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" >/dev/null 2>&1
+    brief="$home/data/$id/brief.md"
+    assert_grep "$ROOT/.agents/skills/worker-reasoning-scaffold/SKILL.md" "$brief" \
+      "$mode ship brief omitted the reasoning-scaffold owner"
+    assert_grep "non-authoritative scaffold" "$brief" \
+      "$mode ship brief dropped the scaffold's authority ceiling"
+    assert_grep "never overrides this brief, the project's own contracts, or the selected delivery path" "$brief" \
+      "$mode ship brief let the scaffold outrank the brief or delivery path"
+    if grep -q "CORE PRIMITIVES" "$brief"; then
+      fail "$mode ship brief copied the scaffold body instead of referencing its owner"
+    fi
+  done
+
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+    "$ROOT/bin/fm-brief.sh" brief-scaffold-scout some-proj --scout >/dev/null 2>&1
+  brief="$home/data/brief-scaffold-scout/brief.md"
+  assert_grep "$ROOT/.agents/skills/worker-reasoning-scaffold/SKILL.md" "$brief" \
+    "scout brief omitted the reasoning-scaffold owner"
+  assert_grep "non-authoritative scaffold" "$brief" \
+    "scout brief dropped the scaffold's authority ceiling"
+  if grep -q "CORE PRIMITIVES" "$brief"; then
+    fail "scout brief copied the scaffold body instead of referencing its owner"
+  fi
+
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+    "$ROOT/bin/fm-brief.sh" brief-scaffold-secondmate --secondmate some-proj >/dev/null 2>&1
+  charter="$home/data/brief-scaffold-secondmate/brief.md"
+  if grep -q "worker-reasoning-scaffold" "$charter"; then
+    fail "secondmate charter carried the worker reasoning-scaffold pointer"
+  fi
+  pass "fm-brief.sh: ship and scout briefs reference the reasoning scaffold once, secondmate charters do not"
+}
+
 test_herdr_lab_contract_is_explicit_and_complete() {
   local home id brief
   home="$TMP_ROOT/herdr-lab-home"
@@ -772,6 +817,7 @@ test_faster_paths_use_configured_authority_without_stacked_review
 test_no_mistakes_dod_wording
 test_ship_project_memory_wording
 test_ship_briefs_load_progressive_assurance_owner
+test_ship_and_scout_briefs_point_at_reasoning_scaffold
 test_herdr_lab_contract_is_explicit_and_complete
 test_herdr_lab_contract_quotes_foreign_firstmate_path
 test_herdr_lab_omission_is_loud_for_ship_and_scout
