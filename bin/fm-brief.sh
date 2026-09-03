@@ -314,7 +314,7 @@ fi
 
 # One unconditional reasoning-scaffold pointer shared by ship and scout briefs.
 # The skill owns the content and its per-harness applicability; the brief carries
-# only this reference (AGENTS.md section 1 one-owner rule).
+# only this reference (firstmate-coding-guidelines one-owner rule).
 REASONING_SCAFFOLD_LINE="Reasoning self-check: read \`$FM_ROOT/.agents/skills/worker-reasoning-scaffold/SKILL.md\` and let its applicability note decide its weight for your harness; it is a non-authoritative scaffold that never overrides this brief, the project's own contracts, or the selected delivery path."
 
 if [ "$KIND" = scout ]; then
